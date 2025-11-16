@@ -1,0 +1,23 @@
+{
+  "name": "HealthTech Solutions",
+  "url": "https://healthtech.com",
+  "products": [
+    "Electronic Health Records",
+    "Healthcare Software",
+    "Patient Management Systems"
+  ],
+  "customers": [
+    "Hospitals",
+    "Healthcare Providers",
+    "Health Systems"
+  ],
+  "segment_mix": {
+    "Healthcare": 0.8,
+    "Education": 0.1,
+    "Commercial": 0.1
+  },
+  "text_profile": "HealthTech Solutions provides electronic health records and healthcare software to hospitals, healthcare providers, and health systems. We offer patient management systems and clinical software solutions for healthcare organizations.",
+  "mode": "all_segments",
+  "industry": "Healthcare"
+}
+

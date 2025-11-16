@@ -1,0 +1,16 @@
+faiss-cpu
+lightgbm
+xgboost
+openai
+pandas
+pyyaml
+requests
+scikit-learn
+shap
+tqdm
+beautifulsoup4
+pyarrow
+yfinance
+numpy
+apify-client
+python-dotenv

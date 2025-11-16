@@ -1,0 +1,22 @@
+{
+  "name": "Stripe",
+  "url": "https://stripe.com",
+  "products": [
+    "Payment Processing",
+    "Transaction APIs",
+    "Payment Solutions"
+  ],
+  "customers": [
+    "Banks",
+    "Retailers",
+    "E-commerce"
+  ],
+  "segment_mix": {
+    "Financial Services": 0.4,
+    "Retail": 0.3,
+    "Commercial": 0.3
+  },
+  "text_profile": "Stripe is a fintech company offering payment processing APIs to banks, retailers, and online merchants. We provide transaction services and payment infrastructure for e-commerce platforms and financial institutions.",
+  "mode": "all_segments"
+}
+

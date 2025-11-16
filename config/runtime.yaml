@@ -1,0 +1,27 @@
+recall:
+  K_total: 200
+  K_keywords: 120
+  K_semantic: 80
+  K_alias: 40
+  epsilon_random: 10
+
+prelim_filter:
+  K_semantic: 300       # Number of neighbors from vector search
+  K_keyword: 200        # Number of top companies by keyword score
+  N_prelim: 250         # Final size of prelim_candidates
+  w_semantic: 0.5       # Weight for semantic similarity
+  w_keyword: 0.25       # Weight for keyword score
+  w_sector: 0.15        # Weight for sector match
+  w_industry: 0.10      # Weight for industry match
+  w_country: 0.0        # Weight for country match (set >0 if country matters)
+
+embeddings:
+  model_name: "text-embedding-3-large"
+  dim: 1536
+
+shortlist_cap: 80
+tenk_trigger_topN: 30
+sec_sleep_ms: 300
+embedding_model: text-embedding-3-large
+prompt_version: svc_cust_v3
+seed: 42

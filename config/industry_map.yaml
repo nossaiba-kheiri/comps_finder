@@ -1,0 +1,59 @@
+# Map SIC/GICS to canonical buckets & pairwise distances
+SIC_to_bucket:
+  8742: Consulting
+  7370: Software
+  7371: Software
+  7372: Software
+  7373: Software
+  6021: Banks
+  6022: Banks
+  6025: Banks
+  6029: Banks
+  6153: Credit Services
+  6159: Credit Services
+
+# GICS industry to bucket mapping (from Yahoo Finance industry field)
+GICS_to_bucket:
+  "Software - Infrastructure": Software
+  "Software - Application": Software
+  "Information Technology Services": IT Services
+  "Consulting Services": Consulting
+  "Banks - Diversified": Banks
+  "Banks - Regional": Banks
+  "Credit Services": Credit Services
+  "Semiconductors": Technology
+  "Consumer Electronics": Technology
+  "Internet Content & Information": Technology
+
+# Inter-bucket distance matrix (for I score)
+bucket_dist:
+  Software:
+    Software: 0.0
+    IT Services: 0.2
+    Consulting: 0.3
+    Technology: 0.4
+    Banks: 1.0
+  IT Services:
+    IT Services: 0.0
+    Software: 0.2
+    Consulting: 0.2
+    Technology: 0.3
+    Banks: 0.8
+  Consulting:
+    Consulting: 0.0
+    IT Services: 0.2
+    Software: 0.3
+    Technology: 0.5
+    Banks: 0.7
+  Technology:
+    Technology: 0.0
+    Software: 0.4
+    IT Services: 0.3
+    Consulting: 0.5
+    Banks: 0.9
+  Banks:
+    Banks: 0.0
+    Credit Services: 0.2
+    Financial Services: 0.3
+    Software: 1.0
+    IT Services: 0.8

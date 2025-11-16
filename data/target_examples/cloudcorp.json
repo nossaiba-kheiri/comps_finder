@@ -1,0 +1,23 @@
+{
+  "name": "CloudCorp",
+  "url": "https://cloudcorp.com",
+  "products": [
+    "Cloud Services",
+    "SaaS",
+    "Cloud Infrastructure"
+  ],
+  "customers": [
+    "Enterprises",
+    "Businesses",
+    "Organizations"
+  ],
+  "segment_mix": {
+    "Commercial": 0.6,
+    "Education": 0.2,
+    "Healthcare": 0.2
+  },
+  "text_profile": "CloudCorp provides cloud computing services and SaaS solutions to enterprises and businesses. We offer cloud infrastructure, platform services, and software applications for organizations across various industries.",
+  "mode": "all_segments",
+  "industry": "Technology"
+}
+

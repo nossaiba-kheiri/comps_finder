@@ -1,0 +1,100 @@
+# API Keys and Secrets
+.env
+*.env
+.env.local
+*.key
+*.pem
+secrets.yaml
+config/secrets.yaml
+**/secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# Data and Cache (exclude from git)
+# Cache files
+*.sqlite
+*.sqlite3
+*.db
+data/cache/
+data/cache/**
+*.cache
+
+# Generated data files (keep structure but not content)
+data/outputs/*.csv
+data/outputs/*.json
+data/outputs/*.jsonl
+data/universe_us.csv
+data/embeddings/*.faiss
+data/embeddings/*.parquet
+data/target*.json
+!data/target_examples/*.json
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.tmp
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+

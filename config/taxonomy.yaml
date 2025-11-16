@@ -1,0 +1,44 @@
+# Taxonomy: map normalized products/customers to canonical buckets
+# Cross-sector inclusion: products map to permitted industries
+products:
+  Payments:
+    aliases: ["Payment Processing", "Transaction Services", "Payment APIs", "Transaction APIs", "Payment Solutions"]
+    permitted_industries: ["Financial Services", "Technology", "Software - Infrastructure", "Credit Services", "Banks - Regional"]
+  Lending:
+    aliases: ["Loan", "Credit", "Lending Services", "Credit Services"]
+    permitted_industries: ["Banks - Diversified", "Credit Services", "Financial Services", "Mortgage Finance"]
+  Cloud Computing:
+    aliases: ["Cloud Services", "Cloud Platforms", "Cloud Infrastructure", "SaaS"]
+    permitted_industries: ["Software - Infrastructure", "Software - Application", "Information Technology Services", "Technology"]
+  Consulting:
+    aliases: ["Consulting Services", "Professional Services", "Advisory Services"]
+    permitted_industries: ["Consulting Services", "Information Technology Services", "Business Services"]
+  AI/ML Services:
+    aliases: ["Artificial Intelligence", "Machine Learning", "AI Services", "ML Services"]
+    permitted_industries: ["Software - Application", "Software - Infrastructure", "Information Technology Services", "Technology"]
+
+customers:
+  Banks:
+    aliases: ["Bank", "Credit Union", "Financial Institution", "Banking"]
+    canonical: "Banks"
+  Retail:
+    aliases: ["Retailer", "Store", "Retail Chain", "E-commerce"]
+    canonical: "Retail"
+  Healthcare:
+    aliases: ["Health Systems", "Hospitals", "Providers", "Healthcare Providers", "Health Systems"]
+    canonical: "Healthcare"
+  Education:
+    aliases: ["Schools", "Universities", "Educational Institutions", "Education"]
+    canonical: "Education"
+  Government:
+    aliases: ["Government", "Public Sector", "Federal", "State", "Local Government"]
+    canonical: "Government"
+
+# Segments: canonical segment buckets
+segments:
+  - Healthcare
+  - Education
+  - Commercial
+  - Public
+  - Financial Services
+  - Retail
