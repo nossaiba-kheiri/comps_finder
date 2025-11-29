@@ -70,33 +70,60 @@ def extract_item_from_html(html_content, item):
     """
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        text = soup.get_text()
+        
+        # Remove table of contents and navigation elements
+        for toc in soup.find_all(['table', 'nav', 'div'], class_=re.compile(r'toc|contents|navigation', re.I)):
+            toc.decompose()
+        
+        # Get text with better structure preservation
+        text = soup.get_text(separator='\n', strip=True)
         
         # Map item numbers to section names
         item_patterns = {
-            "1": r'(?i)item\s+1[.\s]+business',
-            "1A": r'(?i)item\s+1A[.\s]+(risk\s+factors|risks)',
-            "7": r'(?i)item\s+7[.\s]+(management[.\s]+discussion|md&a)',
-            "7A": r'(?i)item\s+7A[.\s]+(quantitative\s+and\s+qualitative|disclosures)',
+            "1": r'(?i)^\s*item\s+1[.\s]*business\s*$',
+            "1A": r'(?i)^\s*item\s+1A[.\s]*(risk\s+factors|risks)\s*$',
+            "7": r'(?i)^\s*item\s+7[.\s]*(management[.\s]*discussion|md&a)\s*$',
+            "7A": r'(?i)^\s*item\s+7A[.\s]*(quantitative\s+and\s+qualitative|disclosures)\s*$',
         }
         
         # Default pattern if item not in map
         if item not in item_patterns:
-            pattern = rf'(?i)item\s+{re.escape(item)}[.\s]+'
+            pattern = rf'(?i)^\s*item\s+{re.escape(item)}[.\s]*'
         else:
             pattern = item_patterns[item]
         
-        match = re.search(pattern, text)
-        if not match:
-            return ""
+        # Split into lines and find the actual section header (not TOC)
+        lines = text.split('\n')
+        start_idx = None
+        toc_indicators = ['table of contents', 'contents', 'page', 'item 1a', 'item 2']
         
-        start_idx = match.start()
+        for i, line in enumerate(lines):
+            # Skip lines that look like TOC entries (short lines with page numbers)
+            if len(line.strip()) < 50 and any(indicator in line.lower() for indicator in toc_indicators):
+                continue
+            
+            # Look for the actual section header
+            if re.search(pattern, line):
+                # Make sure it's not just a TOC entry - check if next lines have substantial content
+                if i + 1 < len(lines) and len(lines[i + 1].strip()) > 100:
+                    start_idx = i
+                    break
+        
+        if start_idx is None:
+            # Fallback: search in full text (old method)
+            match = re.search(pattern, text, re.MULTILINE)
+            if match:
+                # Find the start of the line containing the match
+                text_before = text[:match.start()]
+                start_idx = len(text_before.split('\n'))
+            else:
+                return ""
+        
+        # Reconstruct text from start_idx
+        item_lines = lines[start_idx:]
+        item_text = '\n'.join(item_lines)
         
         # Find next major item
-        # For Item 1, look for 1A or 2
-        # For Item 1A, look for 2
-        # For Item 7, look for 7A or 8
-        # For Item 7A, look for 8
         next_items_map = {
             "1": ["1A", "2"],
             "1A": ["2"],
@@ -105,18 +132,26 @@ def extract_item_from_html(html_content, item):
         }
         
         next_items = next_items_map.get(item, [str(int(item) + 1) if item.isdigit() else ""])
-        next_pattern = rf'(?i)item\s+({"|".join(next_items)})[.\s]+'
+        next_patterns = [rf'(?i)^\s*item\s+{re.escape(ni)}[.\s]*' for ni in next_items]
         
-        next_match = re.search(next_pattern, text[start_idx + 100:])
-        if next_match:
-            end_idx = start_idx + 100 + next_match.start()
-        else:
-            # If no next item found, take next 50k characters
-            end_idx = min(start_idx + 50000, len(text))
+        # Find the next item in the remaining lines
+        end_idx = len(item_lines)
+        for i, line in enumerate(item_lines[100:], start=100):  # Skip first 100 lines to avoid TOC
+            for next_pattern in next_patterns:
+                if re.search(next_pattern, line):
+                    # Make sure it's a real section, not TOC
+                    if len(line.strip()) > 50 or (i + 1 < len(item_lines) and len(item_lines[i + 1].strip()) > 100):
+                        end_idx = i
+                        break
+            if end_idx < len(item_lines):
+                break
         
-        item_text = text[start_idx:end_idx]
-        # Clean up: remove excessive whitespace
-        item_text = re.sub(r'\s+', ' ', item_text).strip()
+        item_text = '\n'.join(item_lines[:end_idx])
+        
+        # Clean up: remove excessive whitespace but preserve paragraph structure
+        item_text = re.sub(r'[ \t]+', ' ', item_text)  # Collapse spaces/tabs
+        item_text = re.sub(r'\n{3,}', '\n\n', item_text)  # Max 2 newlines
+        item_text = item_text.strip()
         
         return item_text
     except Exception as e:

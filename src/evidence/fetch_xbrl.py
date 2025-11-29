@@ -10,10 +10,15 @@ SEC_COMPANY_FACTS = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 CACHE_DIR = os.path.join(os.path.dirname(__file__), '../../data/cache/xbrl')
 
 
-def fetch_xbrl_segment_revenue(ticker, cik):
+def fetch_xbrl_segment_revenue(ticker, cik, fetch_if_not_cached=True):
     """
     Fetch XBRL segment revenue disaggregation for a ticker.
     Returns dict with segment_mix {segment: revenue_share} or None.
+    
+    Args:
+        ticker: Company ticker
+        cik: CIK number
+        fetch_if_not_cached: If True, fetch from API if not cached. If False, only return cached data.
     """
     if not cik or not ticker:
         return None
@@ -24,14 +29,27 @@ def fetch_xbrl_segment_revenue(ticker, cik):
         return None
     
     try:
-        # Check cache
+        # Check cache (fast path - no network call)
         cache_file = os.path.join(CACHE_DIR, f"{ticker}_xbrl.json")
         if os.path.exists(cache_file):
-            with open(cache_file, 'r') as f:
-                cached = json.load(f)
-                return cached.get('segment_mix')
+            try:
+                with open(cache_file, 'r') as f:
+                    cached = json.load(f)
+                    segment_mix = cached.get('segment_mix')
+                    if segment_mix:
+                        return segment_mix  # Return cached result immediately
+            except (json.JSONDecodeError, IOError):
+                # Corrupted cache - delete and continue
+                try:
+                    os.remove(cache_file)
+                except:
+                    pass
         
-        # Fetch company facts
+        # If not cached and fetch_if_not_cached is False, return None (don't make API call)
+        if not fetch_if_not_cached:
+            return None
+        
+        # Fetch company facts from API
         url = SEC_COMPANY_FACTS.format(cik=cik_clean)
         headers = {'User-Agent': 'CompFinder/1.0 you@email.com'}
         time.sleep(0.3)  # Rate limit

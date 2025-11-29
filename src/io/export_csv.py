@@ -10,7 +10,14 @@ def export_leaderboard(df, path, leaderboard_type='ranked'):
     Export leaderboard to CSV.
     leaderboard_type: 'knn' or 'ranked'
     """
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if df is None or len(df) == 0:
+        print(f"  Warning: Empty dataframe for {leaderboard_type} leaderboard, skipping export")
+        return
+    
+    # Ensure output directory exists
+    output_dir = os.path.dirname(path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     
     # Ensure required columns exist
     if leaderboard_type == 'knn':
@@ -21,6 +28,8 @@ def export_leaderboard(df, path, leaderboard_type='ranked'):
                     df['rank_knn'] = range(1, len(df) + 1)
                 elif col == 'knn_score' and 'S_fast' in df.columns:
                     df['knn_score'] = df['S_fast']
+                elif col == 'knn_score':
+                    df['knn_score'] = 0.0  # Default if no score available
     
     elif leaderboard_type == 'ranked':
         required_cols = ['rank_ml', 'ml_score', 'ticker', 'name', 'exchange', 'P', 'C', 'M', 'S', 'I', 'E', 'R']
@@ -28,12 +37,22 @@ def export_leaderboard(df, path, leaderboard_type='ranked'):
             if col not in df.columns:
                 if col == 'rank_ml':
                     df['rank_ml'] = range(1, len(df) + 1)
-                elif col == 'ml_score' and 'score' in df.columns:
-                    df['ml_score'] = df['score']
+                elif col == 'ml_score' and 'score_adjusted' in df.columns:
+                    df['ml_score'] = df['score_adjusted']
+                elif col == 'ml_score' and 'score_linear' in df.columns:
+                    df['ml_score'] = df['score_linear']
+                elif col == 'ml_score':
+                    df['ml_score'] = 0.0  # Default if no score available
+                elif col in ['P', 'C', 'M', 'S', 'I', 'E', 'R']:
+                    df[col] = 0.0  # Default feature values if missing
     
     # Save to CSV
-    df.to_csv(path, index=False)
-    print(f"✓ Exported {leaderboard_type} leaderboard to: {path} ({len(df)} rows)")
+    try:
+        df.to_csv(path, index=False)
+        print(f"✓ Exported {leaderboard_type} leaderboard to: {path} ({len(df)} rows)")
+    except Exception as e:
+        print(f"  ERROR: Failed to export {leaderboard_type} leaderboard to {path}: {e}")
+        raise
 
 
 if __name__ == "__main__":

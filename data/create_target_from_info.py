@@ -401,6 +401,12 @@ Using ONLY the information in the profile text and assignment fields, extract th
   "product_mix": {{"segment_name": weight_between_0_and_1}},
   "similar_industries": ["similar OWN industries - industries where comparable companies operate (e.g., for a consulting firm: Consulting Services, Business Services, Professional Services)"],
   "customer_industries": ["customer industry verticals served - industries where the company's customers operate (e.g., Healthcare, Education & Research, Financial Services)"],
+  "business_model_type": "services" | "software" | "hybrid_services_software" | "marketplace" | "hardware" | "financial_institution" | "other",
+  "revenue_model": ["project_fees" | "time_and_materials" | "retainers" | "managed_services" | "transaction_fees" | "subscription_software" | "perpetual_license" | "usage_based" | "other"],
+  "services_share_estimate": 0.0-1.0,
+  "has_professional_services": boolean,
+  "has_managed_services": boolean,
+  "has_software_product": boolean,
   "evidence": {{
     "business_activity": [
       {{
@@ -470,6 +476,45 @@ CRITICAL DISTINCTION:
 - similar_industries = OWN industries (what the company IS - for finding comparable companies)
 - customer_industries = Customer industries (who the company SERVES - for scoring similarity)
 
+BUSINESS MODEL CLASSIFICATION (CRITICAL):
+You MUST classify the business model based on the evidence text. This is essential for finding comparable companies.
+
+business_model_type options:
+- "services": Primarily a services firm (consulting, advisory, implementation, managed services, outsourcing, professional services). Revenue comes mainly from people's time/expertise.
+- "software": Primarily a software/product firm (sells licensed or subscription software platforms, SaaS). Revenue comes mainly from software licenses/subscriptions.
+- "hybrid_services_software": Substantial services AND substantial software revenue (e.g., implementation services + software platform, managed services + SaaS).
+- "marketplace": Platform connecting buyers and sellers (transaction fees, commissions).
+- "hardware": Physical products (devices, equipment, manufacturing).
+- "financial_institution": Bank, insurance, fintech with financial services as core.
+- "other": Does not fit above categories.
+
+revenue_model: List all applicable revenue streams from:
+- "project_fees": Fixed-price or time-based project fees
+- "time_and_materials": Hourly/daily billing for services
+- "retainers": Recurring service retainers
+- "managed_services": Ongoing managed services contracts
+- "transaction_fees": Per-transaction fees (marketplaces, payment processing)
+- "subscription_software": Recurring SaaS/subscription software revenue
+- "perpetual_license": One-time software license sales
+- "usage_based": Pay-per-use pricing
+- "other": Other revenue models
+
+services_share_estimate: Your best estimate (0.0 to 1.0) of what percentage of revenue comes from services (0.0 = pure product/software, 1.0 = pure services).
+- Pure services firm: 0.85-1.0
+- Services-heavy hybrid: 0.60-0.85
+- Balanced hybrid: 0.40-0.60
+- Software-heavy hybrid: 0.15-0.40
+- Pure software/product: 0.0-0.15
+
+has_professional_services: true if company offers consulting, advisory, implementation, or professional services.
+has_managed_services: true if company offers ongoing managed services, outsourcing, or business process services.
+has_software_product: true if company sells software products, platforms, or SaaS.
+
+CLUES FOR CLASSIFICATION:
+Services signals: "consulting", "advisory", "professional services", "implementation", "integration", "managed services", "outsourcing", "business process services", "staff augmentation", "time and materials", "project-based".
+Software signals: "platform", "SaaS", "subscription software", "licenses", "our software product", "solution suite", "software-as-a-service", "API platform", "perpetual license".
+Hybrid signals: Both services and software mentioned prominently, "implementation services for our platform", "managed services + software", "consulting around our products".
+
 Return ONLY the JSON object, no other text."""
 
     response = client.chat.completions.create(
@@ -492,6 +537,59 @@ Return ONLY the JSON object, no other text."""
         response_text = response_text.strip()
     
     extracted = json.loads(response_text)
+    
+    # Validate and set defaults for business model fields
+    if 'business_model_type' not in extracted:
+        extracted['business_model_type'] = 'other'
+    if 'revenue_model' not in extracted:
+        extracted['revenue_model'] = ['other']
+    
+    # Ensure 3-layer model exists (convert from legacy if needed)
+    from features.model_similarity import (
+        infer_archetypes_from_legacy, convert_legacy_revenue_model, convert_legacy_delivery_modes
+    )
+    
+    if 'revenue_archetypes' not in extracted or not extracted.get('revenue_archetypes'):
+        extracted['revenue_archetypes'] = infer_archetypes_from_legacy(
+            extracted.get('business_model_type'),
+            extracted.get('revenue_model', []),
+            extracted.get('services_share_estimate', 0.5)
+        )
+    
+    if 'revenue_channels' not in extracted or not extracted.get('revenue_channels'):
+        if extracted.get('revenue_model'):
+            extracted['revenue_channels'] = convert_legacy_revenue_model(extracted.get('revenue_model', []))
+        else:
+            extracted['revenue_channels'] = {}
+    
+    if 'revenue_model_mix' not in extracted or not extracted.get('revenue_model_mix'):
+        if extracted.get('revenue_channels'):
+            extracted['revenue_model_mix'] = extracted['revenue_channels'].copy()  # Legacy compatibility
+        else:
+            extracted['revenue_model_mix'] = {}
+    
+    if 'delivery_modes' not in extracted or not extracted.get('delivery_modes'):
+        extracted['delivery_modes'] = convert_legacy_delivery_modes(
+            extracted.get('business_model_type'),
+            extracted.get('has_software_product', False),
+            extracted.get('has_professional_services', False),
+            extracted.get('has_managed_services', False)
+        )
+    if 'services_share_estimate' not in extracted:
+        extracted['services_share_estimate'] = 0.5  # Default to neutral
+    else:
+        # Ensure services_share_estimate is in valid range [0, 1]
+        try:
+            ss = float(extracted.get('services_share_estimate', 0.5))
+            extracted['services_share_estimate'] = max(0.0, min(1.0, ss))
+        except (ValueError, TypeError):
+            extracted['services_share_estimate'] = 0.5
+    if 'has_professional_services' not in extracted:
+        extracted['has_professional_services'] = False
+    if 'has_managed_services' not in extracted:
+        extracted['has_managed_services'] = False
+    if 'has_software_product' not in extracted:
+        extracted['has_software_product'] = False
     
     # Validate evidence quotes are present in profile_text (exact or near-exact matches)
     # This removes any hallucinations and ensures all evidence quotes are from profile_text
@@ -586,7 +684,8 @@ def create_target_from_info(
     linkedin_url: str = None,
     linkedin_company_name: str = None,
     months_back: int = 8,
-    api_key: str = None
+    api_key: str = None,
+    ticker: str = None
 ) -> Dict:
     """
     Create target.json from assignment inputs + website + LinkedIn.
@@ -718,6 +817,7 @@ def create_target_from_info(
         "url": extracted.get("url", url),
         "primary_industry_classification": extracted.get("primary_industry_classification", primary_industry_classification),
         "business_description": extracted.get("business_description", business_description),
+        "ticker": ticker.upper() if ticker else None,  # Add ticker if provided (for excluding target from results)
         
         # Extracted fields - explicitly selected
         "business_activity": extracted.get("business_activity", []),
@@ -727,6 +827,17 @@ def create_target_from_info(
         "similar_industries": extracted.get("similar_industries", []),
         "customer_industries": extracted.get("customer_industries", extracted.get("industries", [])),  # Backward compatibility: fallback to old 'industries' field
         # NOTE: We do NOT save 'industries' field - only 'customer_industries' (with fallback)
+        # Business model fields
+        "business_model_type": extracted.get("business_model_type", "other"),
+        "revenue_model": extracted.get("revenue_model", ["other"]),  # Legacy format (for backward compatibility)
+        "revenue_archetypes": extracted.get("revenue_archetypes", {}),  # Layer 1 (3-layer model)
+        "revenue_channels": extracted.get("revenue_channels", {}),  # Layer 2 (3-layer model)
+        "revenue_model_mix": extracted.get("revenue_model_mix", {}),  # Legacy (for backward compatibility)
+        "delivery_modes": extracted.get("delivery_modes", []),  # Layer 3 (3-layer model)
+        "services_share_estimate": extracted.get("services_share_estimate", 0.5),
+        "has_professional_services": extracted.get("has_professional_services", False),
+        "has_managed_services": extracted.get("has_managed_services", False),
+        "has_software_product": extracted.get("has_software_product", False),
         "evidence": extracted.get("evidence", {}),
         "raw_profile_text": extracted.get("raw_profile_text", profile_text),
         

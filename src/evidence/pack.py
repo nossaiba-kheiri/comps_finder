@@ -29,7 +29,7 @@ def build_evidence_pack(ticker, cik=None, website=None, should_fetch_10k=False, 
     sources = []
     latest_date = None
     
-    # 1. Fetch site evidence
+    # 1. Fetch site evidence (homepage only - prioritize 10-K)
     # Handle NaN/None/empty website values
     if website and str(website).strip() not in ['', 'nan', 'None', 'NaN']:
         try:
@@ -46,13 +46,22 @@ def build_evidence_pack(ticker, cik=None, website=None, should_fetch_10k=False, 
                 if cache_age < timedelta(days=120):  # 4 months
                     from_cache = True
             
-            site_sources = fetch_site_evidence(website, config)
+            # Limit to homepage only (page 1) - prioritize 10-K Item 1 text
+            # Pass config with max_pages=1 and only homepage path
+            site_config = (config or {}).copy()
+            site_config['max_pages'] = 1
+            site_config['pages'] = ['/']  # Only fetch homepage
+            
+            site_sources = fetch_site_evidence(website, site_config)
+            # If fetched multiple pages from cache, take only first (homepage)
+            if site_sources and len(site_sources) > 1:
+                site_sources = [site_sources[0]]
             sources.extend(site_sources)
             if site_sources:
                 if from_cache:
-                    print(f"    Using cached site pages for {ticker} ({len(site_sources)} pages)")
+                    print(f"    Using cached homepage for {ticker}")
                 else:
-                    print(f"    Fetched {len(site_sources)} site pages for {ticker}")
+                    print(f"    Fetched homepage for {ticker}")
         except Exception as e:
             print(f"    Warning: Failed to fetch site evidence for {ticker}: {e}")
             # Continue without site evidence
@@ -79,9 +88,12 @@ def build_evidence_pack(ticker, cik=None, website=None, should_fetch_10k=False, 
                 print(f"    Fetched 10-K for {ticker}")
     
     # 3. Fetch XBRL segment revenue (if available)
+    # Smart strategy: Always try (cache check is fast), but only fetch from API for top companies
     segment_mix = None
-    if cik:
-        segment_mix = fetch_xbrl_segment_revenue(ticker, cik)
+    should_fetch_xbrl = config.get('should_fetch_xbrl', False)
+    should_fetch_xbrl_if_not_cached = config.get('should_fetch_xbrl_if_not_cached', True)
+    if should_fetch_xbrl and cik:
+        segment_mix = fetch_xbrl_segment_revenue(ticker, cik, fetch_if_not_cached=should_fetch_xbrl_if_not_cached)
         if segment_mix:
             print(f"    Fetched XBRL segment mix for {ticker}")
     

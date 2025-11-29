@@ -48,6 +48,29 @@ def construct_target_profile_text(target: Dict) -> str:
     """
     parts = []
     
+    # (a) Business model emphasis (generic - extract from similar_industries)
+    business_model_type = target.get('business_model_type', '').lower()
+    services_share = target.get('services_share_estimate', 0.5)
+    similar_industries = target.get('similar_industries', [])
+    
+    # Extract industry-specific terms from similar_industries for better semantic matching
+    # This works for any industry, not just consulting
+    if similar_industries:
+        # Extract key terms from industry names (e.g., "Consulting Services" -> "consulting", "services")
+        industry_terms = []
+        for industry in similar_industries:
+            industry_lower = industry.lower()
+            # Split by common separators and extract meaningful words
+            words = industry_lower.replace('-', ' ').replace('_', ' ').split()
+            # Keep words that are meaningful (length >= 4, not common stop words)
+            meaningful_words = [w for w in words if len(w) >= 4 and w not in ['and', 'the', 'for', 'with']]
+            industry_terms.extend(meaningful_words)
+        
+        if industry_terms:
+            # Add unique industry terms to profile
+            unique_terms = list(set(industry_terms))[:5]  # Limit to top 5 unique terms
+            parts.append(' '.join(unique_terms) + '. ')
+    
     # (a) Product mix sentence
     product_mix = target.get('product_mix', {})
     if product_mix:
@@ -79,6 +102,12 @@ def construct_target_profile_text(target: Dict) -> str:
             customers_sentence = f"We serve {customers_list}. "
         parts.append(customers_sentence)
     
+    # (d) Similar industries (for better matching)
+    similar_industries = target.get('similar_industries', [])
+    if similar_industries:
+        industries_text = ', '.join(similar_industries)
+        parts.append(f"Industry: {industries_text}. ")
+    
     # Use existing text_profile if present, otherwise use constructed
     if target.get('text_profile'):
         # Option: append or replace (for now, append)
@@ -96,6 +125,36 @@ def build_target_keywords(target: Dict) -> List[Dict]:
     """
     keywords = []
     
+    # Add industry-specific keywords extracted from similar_industries (generic approach)
+    business_model_type = target.get('business_model_type', '').lower()
+    services_share = target.get('services_share_estimate', 0.5)
+    similar_industries = target.get('similar_industries', [])
+    
+    # Extract industry-specific terms from similar_industries
+    # This works for any industry: consulting, software, manufacturing, etc.
+    if similar_industries:
+        industry_keywords = []
+        for industry in similar_industries:
+            industry_lower = industry.lower()
+            # Extract meaningful terms from industry name
+            words = industry_lower.replace('-', ' ').replace('_', ' ').split()
+            meaningful_words = [w for w in words if len(w) >= 4 and w not in ['and', 'the', 'for', 'with', 'services']]
+            industry_keywords.extend(meaningful_words)
+            
+            # Add common business suffixes/patterns that appear in company names
+            # These are generic and work for any industry
+            common_business_terms = ['group', 'partners', 'solutions', 'systems', 'services', 
+                                    'technologies', 'holdings', 'corporation', 'company']
+            # Only add if they appear in the industry name (to avoid adding irrelevant terms)
+            for term in common_business_terms:
+                if term in industry_lower:
+                    industry_keywords.append(term)
+        
+        # Add unique industry keywords with high weight
+        unique_industry_keywords = list(set(industry_keywords))
+        for term in unique_industry_keywords:
+            keywords.append({"term": term.lower(), "weight": 0.4})  # High weight for industry terms
+    
     # Product mix terms (higher weights)
     product_mix = target.get('product_mix', {})
     for term, weight in product_mix.items():
@@ -110,6 +169,18 @@ def build_target_keywords(target: Dict) -> List[Dict]:
     customer_segment = target.get('customer_segment', [])
     for term in customer_segment:
         keywords.append({"term": term.lower(), "weight": 0.2})
+    
+    # Similar industries (for industry matching)
+    similar_industries = target.get('similar_industries', [])
+    for industry in similar_industries:
+        # Extract key terms from industry names
+        industry_lower = industry.lower()
+        if 'consulting' in industry_lower:
+            keywords.append({"term": "consulting", "weight": 0.5})
+        if 'services' in industry_lower:
+            keywords.append({"term": "services", "weight": 0.3})
+        # Add full industry name as keyword
+        keywords.append({"term": industry_lower, "weight": 0.3})
     
     return keywords
 
@@ -256,10 +327,10 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
     customer_segment = target.get('customer_segment', [])
     keyword_parts.extend(customer_segment)
     
-    # Also add products if available
-    products = target.get('products', [])
-    if products:
-        keyword_parts.extend(products)
+    # Use business_activity instead of products to avoid bias
+    # Products (e.g., "enterprise health record") can match across different business models
+    # Business activity (e.g., "consulting services") better captures what the company DOES
+    # Note: business_activity was already added above, so we skip products here
     
     # Construct keyword text for embedding
     target_keyword_text = ' '.join(keyword_parts).lower().strip()
@@ -344,6 +415,65 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
     keyword_hits = set([ticker for ticker, _ in sorted_kw[:K_keyword]])
     print(f"    Selected top {len(keyword_hits)} keyword matches")
     
+    # Path B.5: Additional industry-specific company search (generic)
+    # This helps find companies in the same industry that might not match on exact keywords
+    business_model_type = target.get('business_model_type', '').lower()
+    services_share = target.get('services_share_estimate', 0.5)
+    similar_industries = target.get('similar_industries', [])
+    
+    # Only do this for services-based companies (consulting, professional services, etc.)
+    # For software/manufacturing, the semantic/keyword search should be sufficient
+    if (business_model_type in ['services', 'hybrid_services_software'] or services_share >= 0.5) and similar_industries:
+        industry_company_hits = set()
+        
+        # Extract industry keywords from similar_industries (fully generic)
+        industry_keywords = []
+        for industry in similar_industries:
+            industry_lower = industry.lower()
+            # Extract meaningful words from industry name
+            words = industry_lower.replace('-', ' ').replace('_', ' ').split()
+            meaningful_words = [w for w in words if len(w) >= 4 and w not in ['and', 'the', 'for', 'with']]
+            industry_keywords.extend(meaningful_words)
+            
+            # Add common business suffixes/patterns (generic, not industry-specific)
+            # These help match company names (e.g., "Group", "Partners", "Solutions", "Systems")
+            common_suffixes = ['group', 'partners', 'solutions', 'systems', 'services', 'technologies', 'holdings']
+            # Only add if they're relevant to the industry (e.g., if industry has "services", add "services")
+            for suffix in common_suffixes:
+                if suffix in industry_lower:
+                    industry_keywords.append(suffix)
+        
+        unique_industry_keywords = list(set(industry_keywords))
+        
+        for _, row in universe_df.iterrows():
+            ticker = row['ticker']
+            name = str(row.get('name', '')).lower()
+            industry = str(row.get('industry', '')).lower()
+            summary = str(row.get('summary', '')).lower()
+            
+            # Check if company name contains industry keywords
+            name_has_industry = any(kw in name for kw in unique_industry_keywords)
+            # Check if industry matches target's similar industries
+            industry_matches = any(target_ind.lower() in industry or industry in target_ind.lower() 
+                                  for target_ind in similar_industries)
+            # Check if summary mentions industry terms prominently
+            summary_has_industry = any(kw in summary for kw in unique_industry_keywords[:3])  # Top 3 keywords
+            
+            if (name_has_industry or industry_matches or summary_has_industry):
+                industry_company_hits.add(ticker)
+        
+        # Add industry company hits to keyword_hits (up to additional 50)
+        additional_industry = industry_company_hits - keyword_hits
+        if additional_industry:
+            # Add top scoring ones (if they have any KW_score) or just add them all
+            additional_sorted = sorted(
+                [(t, KW_score.get(t, 0.1)) for t in additional_industry],
+                key=lambda x: x[1],
+                reverse=True
+            )[:50]  # Add up to 50 additional industry companies
+            keyword_hits.update([t for t, _ in additional_sorted])
+            print(f"    Found {len(additional_industry)} additional industry companies, added {len(additional_sorted)}")
+    
     # Store Path B evidence for later use (if NLP was used)
     if 'path_b_evidence' in locals() and path_b_evidence:
         # Make path_b_evidence accessible to caller
@@ -368,14 +498,13 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
         print(f"    Target similar industries: {target_similar_industries}")
         print(f"    Using similar_industries for filtering candidates by own industry")
     elif target_own_industry:
-        # Fallback: Extract key terms from own industry (e.g., "Research and Consulting Services" -> ["consulting", "services"])
+        # Fallback: Extract key terms from own industry (generic - works for any industry)
         industry_terms = []
-        if 'consulting' in target_own_industry:
-            industry_terms.append('consulting')
-        if 'services' in target_own_industry:
-            industry_terms.append('services')
-        if 'research' in target_own_industry:
-            industry_terms.append('research')
+        target_own_industry_lower = target_own_industry.lower()
+        # Extract meaningful words (length >= 4, not common stop words)
+        words = target_own_industry_lower.replace('-', ' ').replace('_', ' ').split()
+        meaningful_words = [w for w in words if len(w) >= 4 and w not in ['and', 'the', 'for', 'with']]
+        industry_terms.extend(meaningful_words)
         
         # If we can identify industry terms, filter universe
         # But be lenient - don't filter too strictly (keep semantic/keyword candidates too)
@@ -421,6 +550,25 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
                     industry_match[ticker] = 1
                     industry_hits.add(ticker)
                     break
+            
+            # Also check for key industry terms even if exact match fails (generic fuzzy matching)
+            # This helps find companies in the same industry that might be classified slightly differently
+            if not industry_match.get(ticker, 0):
+                # Extract key terms from target's similar industries
+                target_industry_terms = []
+                for ind in target_similar_industries:
+                    ind_lower = ind.lower()
+                    words = ind_lower.replace('-', ' ').replace('_', ' ').split()
+                    meaningful_words = [w for w in words if len(w) >= 4 and w not in ['and', 'the', 'for', 'with']]
+                    target_industry_terms.extend(meaningful_words)
+                
+                # Check if candidate's industry shares key terms with target's industries
+                target_has_terms = len(target_industry_terms) > 0
+                candidate_has_terms = any(term in industry for term in target_industry_terms)
+                
+                if target_has_terms and candidate_has_terms:
+                    industry_match[ticker] = 1
+                    industry_hits.add(ticker)
         elif target_own_industry and industry:
             # Fallback: Check if candidate's industry matches target's own industry
             # Use fuzzy matching (contains, word overlap)
@@ -431,13 +579,15 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
                     industry_hits.add(ticker)
                     break
             
-            # Also check for common industry type keywords (consulting, services, etc.)
-            if 'consulting' in target_own_industry and 'consulting' in industry:
-                industry_match[ticker] = 1
-                industry_hits.add(ticker)
-            elif 'services' in target_own_industry and 'services' in industry:
-                industry_match[ticker] = 1
-                industry_hits.add(ticker)
+            # Also check for common industry type keywords (generic - extract from industry name)
+            # Extract meaningful terms from target's own industry
+            target_industry_words = [w for w in target_own_industry.lower().split() if len(w) >= 4]
+            # Check if candidate's industry shares any meaningful terms
+            for term in target_industry_words:
+                if term in industry:
+                    industry_match[ticker] = 1
+                    industry_hits.add(ticker)
+                    break
         
         # Country match
         if target_country:
@@ -448,11 +598,91 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
     sector_industry_hits = sector_hits | industry_hits
     print(f"    Found {len(sector_hits)} sector matches, {len(industry_hits)} industry matches")
     
-    # 5. Combine paths
+    # 5. Combine paths (before business model filter)
     prelim_candidates = semantic_hits | keyword_hits | sector_industry_hits
     print(f"  Combined: {len(prelim_candidates)} preliminary candidates")
     
-    # 6. Compute normalized scores and score_pre
+    # 6. Path D - Business Model Filter (lightweight keyword-based, before LLM extraction)
+    # This filters out obviously wrong business models (e.g., pure SaaS for services target)
+    # Uses target's business_model_type and simple keyword matching on summaries
+    print(f"  Path D: Business model filtering...")
+    
+    target_bm_type = target.get('business_model_type', '').lower()
+    target_services_share = target.get('services_share_estimate', 0.5)
+    
+    # Keywords that indicate services vs software/product companies
+    services_keywords = [
+        'consulting', 'advisory', 'professional services', 'implementation',
+        'integration', 'managed services', 'outsourcing', 'business process services',
+        'staff augmentation', 'time and materials', 'project-based', 'advisory services'
+    ]
+    software_keywords = [
+        'saas', 'subscription software', 'software platform', 'our platform',
+        'license fees', 'perpetual license', 'licensed software', 'api platform',
+        'software-as-a-service', 'cloud platform', 'software product'
+    ]
+    marketplace_keywords = ['marketplace', 'platform marketplace', 'two-sided marketplace']
+    hardware_keywords = ['hardware', 'semiconductor', 'equipment manufacturing']
+    financial_keywords = ['bank', 'financial institution', 'insurance company', 'lending']
+    
+    business_model_filtered = set()
+    business_model_rejected = set()
+    
+    # Only apply business model filter if target has business model info
+    if target_bm_type or target_services_share is not None:
+        # Determine what to filter for
+        is_services_target = (
+            target_bm_type in ['services', 'hybrid_services_software'] or
+            (target_services_share is not None and target_services_share >= 0.5)
+        )
+        
+        # Disallowed types (from config, but hardcode for prelim since we don't have LLM extraction yet)
+        disallowed_types = ['marketplace', 'hardware', 'financial_institution', 'other']
+        
+        for ticker in prelim_candidates:
+            row = universe_df[universe_df['ticker'] == ticker].iloc[0] if len(universe_df[universe_df['ticker'] == ticker]) > 0 else None
+            if row is None:
+                continue
+            
+            summary_lower = str(row.get('summary', '')).lower()
+            industry_lower = str(row.get('industry', '')).lower()
+            
+            # Quick keyword-based business model detection (lightweight, no LLM)
+            services_hits = sum(1 for kw in services_keywords if kw in summary_lower or kw in industry_lower)
+            software_hits = sum(1 for kw in software_keywords if kw in summary_lower or kw in industry_lower)
+            marketplace_hits = sum(1 for kw in marketplace_keywords if kw in summary_lower or kw in industry_lower)
+            hardware_hits = sum(1 for kw in hardware_keywords if kw in summary_lower or kw in industry_lower)
+            financial_hits = sum(1 for kw in financial_keywords if kw in summary_lower or kw in industry_lower)
+            
+            # Reject disallowed types
+            if marketplace_hits >= 2 or hardware_hits >= 2 or financial_hits >= 2:
+                business_model_rejected.add(ticker)
+                continue
+            
+            # If target is services-focused, penalize/reject pure software companies
+            if is_services_target:
+                # If clearly software-heavy (3+ software keywords, 1 or fewer services keywords)
+                if software_hits >= 3 and services_hits <= 1:
+                    # Reject pure software companies for services target
+                    business_model_rejected.add(ticker)
+                    continue
+                # If balanced or services-heavy, keep
+                business_model_filtered.add(ticker)
+            else:
+                # Target is not services-focused, keep all (or apply reverse logic if needed)
+                business_model_filtered.add(ticker)
+    
+    # Apply business model filter
+    if business_model_filtered:
+        prelim_candidates = prelim_candidates & business_model_filtered
+        print(f"    Business model filter: kept {len(business_model_filtered)}, rejected {len(business_model_rejected)}")
+    else:
+        # If no business model info in target, skip filtering
+        print(f"    Business model filter: skipped (no target business model info)")
+    
+    print(f"  Final (after business model filter): {len(prelim_candidates)} preliminary candidates")
+    
+    # 7. Compute normalized scores and score_pre
     print(f"  Computing preliminary scores...")
     
     # Normalize S_fast and KW_score on prelim_candidates only

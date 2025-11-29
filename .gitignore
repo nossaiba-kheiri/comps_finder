@@ -68,7 +68,33 @@ data/universe_us.csv
 data/embeddings/*.faiss
 data/embeddings/*.parquet
 data/target*.json
+data/o.json
 !data/target_examples/*.json
+
+# Test files and example data
+test_*.py
+*_test.py
+*_example*.py
+*_debug.py
+*_only.py
+read_cache_by_hash.py
+
+# Documentation and markdown files (unless they are README)
+*.md
+!README.md
+
+# Macro merge functionality (not part of Pipeline 1)
+src/ranker/macro_statistical_merge.py
+
+# Cache directories
+data/cache/deleted_cache/
+src/features/data/
+src/features/shap_cache/
+src/features/segment_vocab_cache/
+
+# Virtual environment
+.venv/
+venv/
 
 # Logs
 *.log

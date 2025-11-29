@@ -1,0 +1,141 @@
+# Scoring Configuration
+# Override defaults in scoring_config.py by editing this file
+
+weights:
+  P: 0.20  # Product overlap (materiality-weighted, using NLP embeddings)
+  C: 0.20  # Customer overlap (segment/customer matching)
+  S: 0.20  # Segment distribution similarity (portfolio-aware, replaces M)
+  B: 0.15  # Business model similarity (services_share, business_model_type, capabilities)
+  V: 0.20  # Vertical similarity (multi-hot encoding of vertical categories) - NEW
+  I: 0.03  # Industry proximity (small hint, not a filter)
+  E: 0.01  # Evidence quality
+  R: 0.01  # Recency
+
+business_model:
+  disallowed_types:
+    - marketplace
+    - hardware
+    - financial_institution
+    - other
+  # min_services_share_for_gate: dynamically set based on target's services_share_estimate (target - 0.15)
+  # services_share_anchor: dynamically set to target's services_share_estimate
+  services_penalty_weight: 0.6  # Strength of penalty (multiplier)
+  strong_penalty_for_failed_gate: 0.7  # Strong penalty (0-1) for companies that fail business_model gate
+
+# Business Model Classification Configuration
+# All thresholds for business model classification and similarity scoring
+business_model_config:
+  # Classification thresholds
+  services_pure_min: 0.80  # ≥ 80% services ⇒ "services"
+  software_pure_max: 0.20  # ≤ 20% services & has software ⇒ "software"
+  hybrid_min: 0.40  # 40-60% services & has software ⇒ true balanced "hybrid_services_software"
+  hybrid_max: 0.60
+  services_led_min: 0.60  # > 60% services & has software ⇒ "services" (services-led hybrid)
+  software_led_max: 0.40  # < 40% services & has software ⇒ "software" (software-led hybrid)
+  
+  # Business-model similarity scaling
+  bm_scale_min: 0.4  # min multiplier when services_share very different
+  bm_scale_max: 1.0  # max multiplier when identical
+  
+  # Hard gates for clearly non-comparable types
+  gated_out_types:
+    - hardware
+    - marketplace
+    - financial_institution
+  
+  # Business model similarity scoring weights (for B feature)
+  similarity_share_weight: 0.6  # Weight for services share similarity
+  similarity_type_weight: 0.3   # Weight for type bonus (identical/same family)
+  similarity_capability_weight: 0.1  # Weight for required capabilities
+  
+  # Type bonus values
+  type_bonus_identical: 0.5  # Bonus when business_model_type is identical
+  type_bonus_same_family: 0.3  # Bonus when in same family (e.g., both services-heavy)
+  type_bonus_none: 0.0  # No bonus
+  
+  # Required capabilities thresholds
+  services_heavy_threshold: 0.6  # services_share >= this → requires services capabilities
+  product_heavy_threshold: 0.4  # services_share <= this → requires product capabilities
+  
+  # Required capabilities penalty values
+  missing_professional_services_penalty: 0.4
+  missing_managed_services_penalty: 0.3
+  missing_software_product_penalty: 0.4
+  missing_hardware_product_penalty: 0.4
+  
+  # Validation thresholds (for LLM extraction validation)
+  pure_software_max_services_share: 0.2  # Pure software should have services_share <= 0.2
+  software_primary_max_services_share: 0.3  # Software-primary should have services_share <= 0.3
+  pure_saas_services_share: 0.15  # Pure SaaS (only subscription_software revenue model)
+  
+  # Business model penalty (for scorer_rule.py)
+  services_share_anchor_default: 0.5  # Default anchor when target not provided
+  services_penalty_weight: 0.4  # Strength of penalty (multiplier)
+  strong_penalty_for_failed_gate: 0.7  # Strong penalty when gate fails
+  
+  # Family groupings (for same-family logic)
+  services_family:
+    - services
+    - hybrid_services_software
+  product_family:
+    - software
+    - hybrid_services_software
+  hardware_family:
+    - hardware
+  marketplace_family:
+    - marketplace
+
+segments:
+  # Segment similarity (sim_cosine) is a FIRST-CLASS feature - primary score
+  # Entropy penalty is applied ONLY when target is diversified (multi-segment)
+  min_segment_similarity: 0.3  # Lowered from 0.5 to 0.3 for consulting targets (more lenient)
+  diversification_threshold: 0.3  # Entropy threshold to consider target "diversified" (multi-segment)
+  # For diversified targets: penalize concentrated candidates
+  max_entropy_penalty_for_diversified: 0.6  # Maximum allowed entropy penalty when target is diversified
+  min_similarity_for_concentrated_candidate: 0.5  # Lowered from 0.7 to 0.5 (more lenient for concentrated candidates)
+  concentration_penalty_weight: 0.4  # Lambda (λ) - how much to penalize entropy mismatch when target is diversified (0.0-1.0)
+  # Legacy (fallback only)
+  min_shared_segments: 0
+  min_customer_similarity: 0.2  # Lowered from 0.3 to 0.2 (more lenient)
+
+model_similarity:
+  # SOFT DISCIPLINE GATE: Use quadratic penalty instead of hard pass/fail
+  # Companies with low discipline similarity are heavily downweighted, not removed
+  min_discipline_similarity: 0.15  # Minimum discipline similarity (D) - below this, apply quadratic penalty
+  # Discipline similarity (D) is a weighted combination of archetype, channel, delivery similarities
+  discipline_archetype_weight: 0.50  # Weight for archetype similarity in D calculation
+  discipline_channel_weight: 0.30   # Weight for channel similarity in D calculation
+  discipline_delivery_weight: 0.20  # Weight for delivery similarity in D calculation
+  # ECONOMIC SIMILARITY: Kills SaaS vs consulting, payer vs transformation mismatches
+  min_economic_similarity: 0.40  # Minimum overall economic similarity - below this, apply quadratic penalty (stricter to kill SaaS vs consulting)
+  # Weights for scoring (additive to base score) - Layer 1 gets highest weight
+  archetype_similarity_weight: 0.15
+  channel_similarity_weight: 0.10
+  delivery_similarity_weight: 0.05
+  # Backward compatibility (kept for legacy code, but not used for gates)
+  min_archetype_similarity_for_gate: 0.30
+  min_channel_similarity_for_gate: 0.25
+  min_delivery_similarity_for_gate: 0.25
+  min_revenue_similarity_for_gate: 0.25
+  revenue_similarity_weight: 0.10
+
+min_score_for_final_comp: 0.0
+
+gates:
+  min_product_hits: 0  # No minimum product hits required (lenient)
+  min_shared_segments: 0  # Lowered from 1 to 0 (no minimum shared segments required)
+  # P and C thresholds for consulting targets (more lenient)
+  min_P_for_gate: 0.0  # No minimum P required (let scoring handle it)
+  min_C_for_gate: 0.0  # No minimum C required (let scoring handle it)
+
+# Stage 1 rank_key configuration (for preliminary shortlisting)
+# This replaces the crude keyword-based rank_key with semantic + segment + archetype similarity
+stage1_rank:
+  w_product: 0.10        # Weight for product similarity (P_fast) - MINIMIZED to prioritize industry match
+  w_segments: 0.25       # Weight for segment mix similarity (C_mix)
+  w_model: 0.0          # Weight for business model/archetype similarity (M_fast) - DISABLED (not used in rank_key)
+  w_entropy_penalty: 0.10 # Weight for entropy mismatch penalty (diversification mismatch)
+  w_industry_bonus: 0.55  # Weight for industry match bonus - MAXIMUM PRIORITY (companies in same industry rank first)
+  # Minimum thresholds for diversity enforcement (segment-aware)
+  min_C_mix_for_diversity: 0.3  # Minimum segment mix similarity to consider for diversity
+  min_M_fast_for_diversity: 0.4  # Minimum model similarity to consider for diversity

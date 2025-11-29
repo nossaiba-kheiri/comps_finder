@@ -16,7 +16,7 @@ except ImportError:
     EMBEDDINGS_AVAILABLE = False
     get_cached_embedding = None
 
-def score_product_overlap(target_products, candidate_business_activity, taxonomy=None, initiatives=None, run_with_openai=False, similarity_threshold=0.7):
+def score_product_overlap(target_products, candidate_business_activity, taxonomy=None, initiatives=None, run_with_openai=False, similarity_threshold=0.5):
     """
     Compute product overlap score P using NLP embeddings for semantic similarity.
     Returns score in [0, 1], hit count, and concept_matches with materiality.
@@ -218,6 +218,16 @@ def score_product_overlap(target_products, candidate_business_activity, taxonomy
                         'match_strength': float(best_similarity),
                         'similarity': float(best_similarity)
                     })
+            
+            # If embeddings were used but no matches found, fall back to substring matching
+            if hits == 0 and len(target_embeddings) > 0 and len(candidate_embeddings) > 0:
+                # Embeddings worked but no matches above threshold - try substring as fallback
+                # Reset state for substring matching
+                hits = 0
+                hit_products = []
+                concept_matches = []
+                weighted_score = 0.0
+                use_embeddings = False
         
         except Exception as e:
             # If embeddings fail, fall back to substring matching
