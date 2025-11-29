@@ -1,0 +1,11 @@
+rank,ticker,name,exchange,url,business_activity,customer_segment,business_model_type,services_share_estimate,sic_industry
+1,ADM,Archer-Daniels-Midland Co,NYSE,https://www.adm.com,"human nutrition products, animal nutrition products, pet nutrition products","food and beverage manufacturers, animal feed producers, pet product companies",hybrid_services_software,0.6,Farm Products
+2,BG,Bunge Global SA,NYSE,https://www.bunge.com,"agribusiness solutions, food and ingredients, crop infrastructure for renewable energy","farmers, food and nutrition industry",services,0.85,Farm Products
+3,FDP,FRESH DEL MONTE PRODUCE INC,NYSE,https://www.freshdelmonte.com,"fresh and fresh-cut fruits and vegetables, prepared foods, logistics network","consumers, third-party logistics customers",other,0.85,Farm Products
+4,DOLE,Dole plc,NYSE,https://www.doleplc.com,"growing, sourcing, packing","retail, wholesale, food service",other,1.0,Farm Products
+5,ANDE,"Andersons, Inc.",NASDAQ,https://andersonsinc.com,"agriculture supply chain, fertilizer, farmer services","agriculture industry, renewable energy sector",services,0.85,Food Distribution
+6,WILC,G WILLI FOOD INTERNATIONAL LTD,NASDAQ,https://www.willi-food.co.il,"import of food products, distribution of dry, frozen, and chilled food products","food retailers, food service providers",other,0.0,Food Distribution
+7,PFAI,Pinnacle Food Group Ltd,NASDAQ,https://www.pinnaclefoodinc.com,"Hydroponic Growing Systems, Data-Driven customized support","individual households, community groups, urban farms",services,0.6,Farm Products
+8,AGRZ,Agroz Inc.,NASDAQ,https://agrozgroup.com,"CEA vertical farming, indoor vertical farm design and construction, operation and management of vertical farms","wholesale distributors, major retailers",hybrid_services_software,0.6,Farm Products
+9,SDOT,Sadot Group Inc.,NASDAQ,https://www.sadotgroupinc.com,"global food supply chain solutions, farming & warehousing, shipping and carbon monitoring","farmers, traders, logistics providers",services,1.0,Farm Products
+10,SYY,SYSCO CORP,NYSE,https://www.sysco.com,wholesale restaurant food distribution,restaurants,other,0.0,Food Distribution
