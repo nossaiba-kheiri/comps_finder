@@ -101,17 +101,26 @@ def gate_economic_engine(
         return True
     
     # Get candidate's economic signature
+    # NOTE: row_for_gates merges extracted_data directly, so economic_signature might be at top level
     candidate_sig = {}
     if hasattr(row_or_dict, 'get'):
-        # Try extracted_data first
+        # Try nested extracted_data first (if structure preserved)
         extracted = row_or_dict.get('extracted_data', {}) or {}
-        candidate_sig = extracted.get('economic_signature', {}) or {}
+        if extracted:
+            candidate_sig = extracted.get('economic_signature', {}) or {}
         
-        # If not in extracted_data, try direct access
+        # If not in nested extracted_data, try direct access (merged structure)
         if not candidate_sig:
             candidate_sig = row_or_dict.get('economic_signature', {}) or {}
     elif isinstance(row_or_dict, dict):
-        candidate_sig = row_or_dict.get('economic_signature', {}) or {}
+        # Try nested extracted_data first
+        extracted = row_or_dict.get('extracted_data', {}) or {}
+        if extracted:
+            candidate_sig = extracted.get('economic_signature', {}) or {}
+        
+        # If not in nested extracted_data, try direct access
+        if not candidate_sig:
+            candidate_sig = row_or_dict.get('economic_signature', {}) or {}
     
     # If candidate doesn't have economic signature, try to infer from business description
     if not candidate_sig or not candidate_sig.get('capacity_unit') or candidate_sig.get('capacity_unit') == 'none':
@@ -120,12 +129,38 @@ def gate_economic_engine(
             # Create a dict with business_description for inference
             candidate_profile = {}
             if hasattr(row_or_dict, 'get'):
-                candidate_profile['business_description'] = row_or_dict.get('business_description', '') or row_or_dict.get('business_activity', '')
-                candidate_profile['business_activity'] = row_or_dict.get('business_activity', [])
+                # Get business_description, or fallback to business_activity (handle both string and list)
+                business_desc = row_or_dict.get('business_description', '')
+                if not business_desc:
+                    business_activity = row_or_dict.get('business_activity', '')
+                    if isinstance(business_activity, list):
+                        business_desc = ' '.join([str(a) for a in business_activity if a])
+                    elif business_activity:
+                        business_desc = str(business_activity)
+                candidate_profile['business_description'] = business_desc
+                
+                # Get business_activity as list
+                business_activity = row_or_dict.get('business_activity', [])
+                if isinstance(business_activity, str):
+                    # Handle comma-separated string
+                    business_activity = [a.strip() for a in business_activity.split(',') if a.strip()]
+                candidate_profile['business_activity'] = business_activity
                 candidate_profile['revenue_model'] = row_or_dict.get('revenue_model', [])
             else:
-                candidate_profile['business_description'] = row_or_dict.get('business_description', '') or row_or_dict.get('business_activity', '')
-                candidate_profile['business_activity'] = row_or_dict.get('business_activity', [])
+                # Same logic for dict
+                business_desc = row_or_dict.get('business_description', '')
+                if not business_desc:
+                    business_activity = row_or_dict.get('business_activity', '')
+                    if isinstance(business_activity, list):
+                        business_desc = ' '.join([str(a) for a in business_activity if a])
+                    elif business_activity:
+                        business_desc = str(business_activity)
+                candidate_profile['business_description'] = business_desc
+                
+                business_activity = row_or_dict.get('business_activity', [])
+                if isinstance(business_activity, str):
+                    business_activity = [a.strip() for a in business_activity.split(',') if a.strip()]
+                candidate_profile['business_activity'] = business_activity
                 candidate_profile['revenue_model'] = row_or_dict.get('revenue_model', [])
             
             inferred = infer_archetype_fields_from_target(candidate_profile)

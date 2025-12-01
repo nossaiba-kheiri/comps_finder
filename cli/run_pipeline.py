@@ -1838,6 +1838,10 @@ Examples:
             # gate_business_model is always True now (for reporting only)
             if not row.get('gate_segments', True):
                 failed_gates.append('SEG')
+            if not row.get('gate_hospitality_keywords', True):
+                failed_gates.append('HOSP_KEYWORDS')
+            if not row.get('gate_economic_engine', True):
+                failed_gates.append('ECON_ENGINE')
             if not row.get('gate_product_hits', True):
                 failed_gates.append('P_HITS')
             if not row.get('gate_customer_hits', True):
@@ -1853,45 +1857,60 @@ Examples:
         if len(passed_gates_df) < 10:
             print(f"  WARNING: Only {len(passed_gates_df)} companies passed all gates (target: 10)")
             
-            # Fallback 1: Business model gate removed - all companies are ranked (soft penalties handle filtering)
-            # Since ranked_df is already sorted by score_adjusted, just take top 10
-            print(f"  Trying fallback 1: using top 10 by score_adjusted (soft penalties already applied)...")
-            fallback1_df = ranked_df.head(10).copy()
-            print(f"  Using top 10 by {sort_col} (business model gate removed - soft penalties handle filtering)")
+            # Check if gates are too strict (all candidates filtered out)
+            # If hospitality_keywords gate filtered everything, this is likely correct filtering
+            # Don't use fallback with wrong candidates - return empty or fewer results
+            hospitality_gate_failures = (ranked_df['gate_hospitality_keywords'] == False).sum()
+            economic_engine_failures = (ranked_df['gate_economic_engine'] == False).sum()
             
-            if len(fallback1_df) >= 10:
-                passed_gates_df = fallback1_df
-                print(f"  ✓ Using fallback 1: {len(passed_gates_df)} companies that passed business_model gate")
-            elif len(fallback1_df) >= 3:
-                # If we have at least 3, use it but warn
-                passed_gates_df = fallback1_df
-                print(f"  ⚠️  Using fallback 1: {len(passed_gates_df)} companies (fewer than 10, but at least 3)")
+            if hospitality_gate_failures == len(ranked_df):
+                print(f"  ⚠️  All candidates failed hospitality_keywords gate - this suggests:")
+                print(f"     - Preliminary filter selected wrong candidates (not hospitality-related)")
+                print(f"     - OR target company is not hospitality-related")
+                print(f"     - Gates are working correctly, but no valid candidates found")
+                print(f"  → Using only companies that passed gates (may be fewer than 10)")
+                # Keep passed_gates_df as is (empty or small) - don't use fallback
+                # Skip the rest of the fallback logic
             else:
-                # Fallback 2: Just filter by score (no gates) - last resort
-                print(f"  Trying fallback 2: filtering by score only (no gates)...")
-                # Sort by score and take top candidates
-                sort_col = 'score_adjusted' if 'score_adjusted' in ranked_df.columns else 'score_linear'
-                if sort_col not in ranked_df.columns:
-                    sort_col = 'ml_score' if 'ml_score' in ranked_df.columns else 'score_linear_pcms'
+                # Fallback 1: Business model gate removed - all companies are ranked (soft penalties handle filtering)
+                # Since ranked_df is already sorted by score_adjusted, just take top 10
+                print(f"  Trying fallback 1: using top 10 by score_adjusted (soft penalties already applied)...")
+                fallback1_df = ranked_df.head(10).copy()
+                print(f"  Using top 10 by {sort_col} (business model gate removed - soft penalties handle filtering)")
                 
-                fallback2_df = ranked_df.sort_values(sort_col, ascending=False).head(20).copy()
-                print(f"  Companies in top 20 by score: {len(fallback2_df)}")
-                
-                if len(fallback2_df) >= 10:
-                    passed_gates_df = fallback2_df.head(10)
-                    print(f"  ⚠️  Using fallback 2: Top 10 by score (gates were too strict)")
-                elif len(fallback2_df) >= 3:
-                    passed_gates_df = fallback2_df
-                    print(f"  ⚠️  Using fallback 2: Top {len(fallback2_df)} by score (gates were too strict)")
+                if len(fallback1_df) >= 10:
+                    passed_gates_df = fallback1_df
+                    print(f"  ✓ Using fallback 1: {len(passed_gates_df)} companies that passed business_model gate")
+                elif len(fallback1_df) >= 3:
+                    # If we have at least 3, use it but warn
+                    passed_gates_df = fallback1_df
+                    print(f"  ⚠️  Using fallback 1: {len(passed_gates_df)} companies (fewer than 10, but at least 3)")
                 else:
-                    # Last resort: use whatever we have
-                    if len(fallback1_df) > 0:
-                        passed_gates_df = fallback1_df
-                        print(f"  ⚠️  Using fallback 1: {len(passed_gates_df)} companies (gates were too strict)")
+                    # Fallback 2: Just filter by score (no gates) - last resort
+                    print(f"  Trying fallback 2: filtering by score only (no gates)...")
+                    # Sort by score and take top candidates
+                    sort_col = 'score_adjusted' if 'score_adjusted' in ranked_df.columns else 'score_linear'
+                    if sort_col not in ranked_df.columns:
+                        sort_col = 'ml_score' if 'ml_score' in ranked_df.columns else 'score_linear_pcms'
+                    
+                    fallback2_df = ranked_df.sort_values(sort_col, ascending=False).head(20).copy()
+                    print(f"  Companies in top 20 by score: {len(fallback2_df)}")
+                    
+                    if len(fallback2_df) >= 10:
+                        passed_gates_df = fallback2_df.head(10)
+                        print(f"  ⚠️  Using fallback 2: Top 10 by score (gates were too strict)")
+                    elif len(fallback2_df) >= 3:
+                        passed_gates_df = fallback2_df
+                        print(f"  ⚠️  Using fallback 2: Top {len(fallback2_df)} by score (gates were too strict)")
                     else:
-                        print(f"  CRITICAL: No companies passed business_model gate!")
-                        print(f"  This indicates a problem with target profile or gate thresholds.")
-                        # Still try to show top 10 by score as absolute last resort
+                        # Last resort: use whatever we have
+                        if len(fallback1_df) > 0:
+                            passed_gates_df = fallback1_df
+                            print(f"  ⚠️  Using fallback 1: {len(passed_gates_df)} companies (gates were too strict)")
+                        else:
+                            print(f"  CRITICAL: No companies passed business_model gate!")
+                            print(f"  This indicates a problem with target profile or gate thresholds.")
+                            # Still try to show top 10 by score as absolute last resort
                         passed_gates_df = ranked_df.sort_values(sort_col, ascending=False).head(10).copy()
                         print(f"  ⚠️  Showing top 10 by score as absolute last resort (gates failed)")
         
@@ -1958,59 +1977,81 @@ Examples:
     if sort_col not in ranked_df.columns:
         sort_col = 'score_linear' if 'score_linear' in ranked_df.columns else 'score_linear_pcms'
     
-    # SOFT DISCIPLINE FILTERING: No hard gates - companies are ranked by score (which includes discipline penalties)
-    # Companies with low discipline similarity are heavily downweighted (quadratic penalty), not removed
-    # So we just take the top companies by score - the discipline penalty already handled the filtering
-    passed_gates_df = ranked_df.copy()  # All companies pass (soft penalties handle filtering)
-    
-    # Quality filters: Only major exchanges, minimum score threshold
-    quality_filters = runtime_config.get('final_comps', {})
-    min_score_threshold = quality_filters.get('min_score_threshold', 0.0)
-    allowed_exchanges = quality_filters.get('allowed_exchanges', ['NYSE', 'NASDAQ', 'NYSE MKT', 'NYSE Arca'])
-    
-    def apply_quality_filters(df):
-        """Apply quality filters to a dataframe."""
-        filtered = df.copy()
-        if allowed_exchanges:
-            filtered = filtered[
-                filtered['exchange'].isin(allowed_exchanges) | 
-                filtered['exchange'].isna()
-            ].copy()
-        if min_score_threshold > 0:
-            filtered = filtered[filtered[sort_col] >= min_score_threshold].copy()
-        return filtered
-    
-    # Step 2: If we have fewer than 10, use progressive fallbacks
-    if len(passed_gates_df) >= 10:
-        # We have enough companies that passed all gates
-        passed_gates_df = apply_quality_filters(passed_gates_df)
-        passed_gates_df = passed_gates_df.sort_values(sort_col, ascending=False)
-        top_10_df = passed_gates_df.head(10).copy()
-        print(f"  ✓ Selected top 10 from {len(passed_gates_df)} companies that passed all gates")
+    # Check if ranked_df is empty (no companies passed gates)
+    if len(ranked_df) == 0 or ranked_df.empty:
+        print(f"  ⚠️  No companies passed gates - cannot generate final comparables")
+        print(f"  → This suggests the preliminary filter selected wrong candidates")
+        print(f"  → Or the gates are correctly filtering out non-matching companies")
+        # Create empty final output
+        top_10_df = pd.DataFrame()
     else:
-        # Not enough companies passed all gates - use fallbacks
-        print(f"  ⚠️  Only {len(passed_gates_df)} companies passed all gates (target: 10)")
+        # SOFT DISCIPLINE FILTERING: No hard gates - companies are ranked by score (which includes discipline penalties)
+        # Companies with low discipline similarity are heavily downweighted (quadratic penalty), not removed
+        # So we just take the top companies by score - the discipline penalty already handled the filtering
+        passed_gates_df = ranked_df.copy()  # All companies pass (soft penalties handle filtering)
         
-        # Fallback 1: Business model gate removed - all companies are ranked (soft penalties handle filtering)
-        # Since ranked_df is already sorted by score_adjusted, just take top 10
-        fallback1_df = ranked_df.head(10).copy()
-        fallback1_df = apply_quality_filters(fallback1_df)
-        # No need to sort again - already sorted by score_adjusted
+        # Quality filters: Only major exchanges, minimum score threshold
+        quality_filters = runtime_config.get('final_comps', {})
+        min_score_threshold = quality_filters.get('min_score_threshold', 0.0)
+        allowed_exchanges = quality_filters.get('allowed_exchanges', ['NYSE', 'NASDAQ', 'NYSE MKT', 'NYSE Arca'])
         
-        if len(fallback1_df) >= 10:
-            top_10_df = fallback1_df.head(10).copy()
-            print(f"  ✓ Using fallback 1: Top 10 companies that passed business_model gate ({len(fallback1_df)} available)")
-        elif len(fallback1_df) >= 5:
-            top_10_df = fallback1_df.head(10).copy() if len(fallback1_df) >= 10 else fallback1_df.copy()
-            print(f"  ⚠️  Using fallback 1: {len(top_10_df)} companies that passed business_model gate (fewer than 10)")
+        def apply_quality_filters(df):
+            """Apply quality filters to a dataframe."""
+            if df.empty or len(df) == 0:
+                return df
+            filtered = df.copy()
+            if allowed_exchanges and 'exchange' in filtered.columns:
+                filtered = filtered[
+                    filtered['exchange'].isin(allowed_exchanges) | 
+                    filtered['exchange'].isna()
+                ].copy()
+            if min_score_threshold > 0 and sort_col in filtered.columns:
+                filtered = filtered[filtered[sort_col] >= min_score_threshold].copy()
+            return filtered
+        
+        # Step 2: If we have fewer than 10, use progressive fallbacks
+        if len(passed_gates_df) >= 10:
+            # We have enough companies that passed all gates
+            passed_gates_df = apply_quality_filters(passed_gates_df)
+            passed_gates_df = passed_gates_df.sort_values(sort_col, ascending=False)
+            top_10_df = passed_gates_df.head(10).copy()
+            print(f"  ✓ Selected top 10 from {len(passed_gates_df)} companies that passed all gates")
         else:
-            # Fallback 2: Just top by score (no gates) - last resort
-            print(f"  ⚠️  Fallback 1 insufficient ({len(fallback1_df)} companies), using fallback 2: top by score")
-            fallback2_df = ranked_df.copy()
-            fallback2_df = apply_quality_filters(fallback2_df)
-            fallback2_df = fallback2_df.sort_values(sort_col, ascending=False)
-            top_10_df = fallback2_df.head(10).copy()
-            print(f"  ⚠️  Using fallback 2: Top {len(top_10_df)} companies by score (gates were too strict)")
+            # Not enough companies passed all gates - use fallbacks
+            print(f"  ⚠️  Only {len(passed_gates_df)} companies passed all gates (target: 10)")
+            
+            # Fallback 1: Business model gate removed - all companies are ranked (soft penalties handle filtering)
+            # Since ranked_df is already sorted by score_adjusted, just take top 10
+            if len(ranked_df) > 0:
+                fallback1_df = ranked_df.head(10).copy()
+                fallback1_df = apply_quality_filters(fallback1_df)
+            else:
+                # ranked_df is empty - no fallback possible
+                fallback1_df = pd.DataFrame()
+            
+            # No need to sort again - already sorted by score_adjusted
+            
+            if len(fallback1_df) >= 10:
+                top_10_df = fallback1_df.head(10).copy()
+                print(f"  ✓ Using fallback 1: Top 10 companies that passed business_model gate ({len(fallback1_df)} available)")
+            elif len(fallback1_df) >= 5:
+                top_10_df = fallback1_df.head(10).copy() if len(fallback1_df) >= 10 else fallback1_df.copy()
+                print(f"  ⚠️  Using fallback 1: {len(top_10_df)} companies that passed business_model gate (fewer than 10)")
+            elif len(fallback1_df) > 0:
+                top_10_df = fallback1_df.copy()
+                print(f"  ⚠️  Using fallback 1: {len(top_10_df)} companies (very few available)")
+            else:
+                # Fallback 2: Just top by score (no gates) - last resort
+                if len(ranked_df) > 0:
+                    print(f"  ⚠️  Fallback 1 insufficient ({len(fallback1_df)} companies), using fallback 2: top by score")
+                    fallback2_df = ranked_df.copy()
+                    fallback2_df = apply_quality_filters(fallback2_df)
+                    fallback2_df = fallback2_df.sort_values(sort_col, ascending=False)
+                    top_10_df = fallback2_df.head(10).copy()
+                    print(f"  ⚠️  Using fallback 2: Top {len(top_10_df)} companies by score (gates were too strict)")
+                else:
+                    print(f"  ⚠️  No companies available for fallback - ranked_df is empty")
+                    top_10_df = pd.DataFrame()
     
     # Load universe data to get website URLs
     universe_path = os.path.join(DATA_DIR, 'universe_us.csv')

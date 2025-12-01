@@ -25,3 +25,12 @@ sec_sleep_ms: 300
 embedding_model: text-embedding-3-large
 prompt_version: svc_cust_v3
 seed: 42
+
+# Final comps quality filters
+final_comps:
+  min_score_threshold: 0.0  # Minimum score to be included in final comps (0.0 = no threshold)
+  allowed_exchanges:  # Major exchanges only (empty list = allow all)
+    - NYSE
+    - NASDAQ
+    - "NYSE MKT"
+    - "NYSE Arca"

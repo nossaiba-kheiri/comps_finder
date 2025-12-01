@@ -116,13 +116,30 @@ def construct_target_profile_text(target: Dict) -> str:
     target_profile_text = ' '.join(parts)
     
     # Fallback: If no profile text was constructed, use business_description
+    business_description = target.get('business_description', '')
     if not target_profile_text or len(target_profile_text.strip()) == 0:
-        business_description = target.get('business_description', '')
         if business_description:
             target_profile_text = business_description
         else:
             # Last resort: use company name
             target_profile_text = target.get('name', '')
+    
+    # ENHANCEMENT: If we only have business_description (no product_mix, etc.),
+    # ensure it's emphasized in the profile text for better semantic matching
+    if len(parts) == 0 and business_description:
+        # Use business_description as-is (already done above)
+        # But also prepend key hospitality terms to boost semantic matching
+        desc_lower = business_description.lower()
+        hospitality_boost_terms = []
+        if any(term in desc_lower for term in ['vacation', 'holiday', 'rental']):
+            hospitality_boost_terms = ['vacation rental', 'holiday rental', 'hospitality', 'booking platform']
+        elif any(term in desc_lower for term in ['hotel', 'resort', 'lodging']):
+            hospitality_boost_terms = ['hotel', 'resort', 'hospitality', 'lodging']
+        
+        if hospitality_boost_terms:
+            # Prepend boost terms to emphasize hospitality nature
+            boost_text = ' '.join(hospitality_boost_terms) + '. '
+            target_profile_text = boost_text + target_profile_text
     
     return basic_clean(target_profile_text)
 
@@ -191,6 +208,31 @@ def build_target_keywords(target: Dict) -> List[Dict]:
             keywords.append({"term": "services", "weight": 0.3})
         # Add full industry name as keyword
         keywords.append({"term": industry_lower, "weight": 0.3})
+    
+    # ENHANCEMENT: If no keywords extracted yet, extract from business_description
+    # This is crucial when target file is missing product_mix, business_activity, etc.
+    if len(keywords) == 0:
+        business_description = target.get('business_description', '')
+        if business_description:
+            desc_lower = business_description.lower()
+            # Extract meaningful keywords from business description
+            # Common hospitality/vacation rental terms
+            hospitality_terms = ['vacation', 'holiday', 'rental', 'rentals', 'booking', 'hospitality', 
+                               'hotel', 'resort', 'accommodation', 'lodging', 'guest', 'tourist', 
+                               'property management', 'short-term', 'stay', 'nights', 'adr', 'revpar']
+            for term in hospitality_terms:
+                if term in desc_lower:
+                    keywords.append({"term": term, "weight": 0.5})  # High weight for direct matches
+            
+            # Extract other meaningful words (length >= 4, not stop words)
+            import re
+            words = re.findall(r'\b\w{4,}\b', desc_lower)
+            stop_words = {'that', 'this', 'with', 'from', 'have', 'been', 'will', 'their', 'which', 
+                         'there', 'would', 'could', 'should', 'about', 'other', 'more', 'very', 
+                         'what', 'when', 'where', 'company', 'companies', 'business', 'services'}
+            meaningful_words = [w for w in words if w not in stop_words and w not in [kw['term'] for kw in keywords]]
+            for word in meaningful_words[:10]:  # Limit to top 10
+                keywords.append({"term": word, "weight": 0.3})
     
     return keywords
 

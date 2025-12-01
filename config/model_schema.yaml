@@ -1,0 +1,64 @@
+# Business Model Schema - Generic, Industry-Agnostic
+# This schema defines the economic primitives for comparing companies
+# No industry names, only economic mechanisms
+
+# Layer 1: Economic Archetypes (4 fixed dimensions - universal)
+# These are the fundamental ways companies monetize value
+archetypes:
+  - unit_of_work          # Selling effort/time/output directly (consulting, staffing, projects)
+  - access_capability     # Selling right to use capability (SaaS, subscriptions, platforms)
+  - performance_outcome   # Paid based on results delivered (BPO outcomes, revenue share, performance fees)
+  - intermediation       # Taking margin for connecting supply/demand (marketplaces, brokers, exchanges)
+
+# Layer 2: Revenue Channels (extensible - can grow as business models evolve)
+# These are specific monetization mechanisms within each archetype
+channels:
+  # Access Capability channels
+  - license_upfront              # One-time software license (perpetual)
+  - subscription_recurring       # Recurring SaaS/subscription revenue
+  - usage_based                  # Pay-per-use pricing (API calls, compute hours)
+  - data_license                 # Data licensing/subscription (Bloomberg, Epic, Health Catalyst)
+  
+  # Unit of Work channels
+  - professional_services_project # Fixed-price or time-based project fees
+  - managed_services             # Ongoing managed services contracts
+  - training_support             # Training, certifications, support services
+  - maintenance_contracts       # Maintenance and support contracts
+  
+  # Performance/Outcome channels
+  - performance_outcome_fees      # Fees based on performance/results
+  - revenue_share                # Revenue share on cost savings/improvements
+  - outcome_guarantees           # BPO with outcome guarantees
+  
+  # Intermediation channels
+  - transaction_fees             # Per-transaction fees (payment processing)
+  - commission_take_rate         # Commission/take rate (marketplace fees)
+  - marketplace_take_rate         # Marketplace platform take rate
+  - referral_fees                # Referral/affiliate fees
+  
+  # Other channels
+  - hardware_sales               # Physical product sales
+  - consumables_replace          # Consumables/razor-blade model (MedTech)
+  - financing_fee                # Embedded financing fees
+  - advertising                  # Advertising revenue
+  - embedded_finance             # Embedded financial services revenue
+  - grants                       # Grants and funding
+  - government_contracts_fixed  # Fixed-price government contracts
+  - government_contracts_time_material # Time & materials government contracts
+  - enterprise_custom_deal       # Custom enterprise deals
+  - tokenomics                   # Tokenomics/crypto revenue
+  - other                        # Other revenue models not covered
+
+# Layer 3: Delivery Modes (how products/services are delivered)
+delivery_modes:
+  - on_premise_software          # Software installed on customer premises
+  - cloud_saas                   # Cloud-based SaaS delivery
+  - field_services               # On-site services (field technicians, consultants)
+  - remote_services              # Remote/digital services (virtual consulting)
+  - retail_distribution          # Physical retail/distribution channels
+  - online_marketplace           # Online marketplace platform
+  - embedded_in_partner_product # Embedded in partner's products
+  - api_access                   # API-based access
+  - data_feed                    # Data feed/subscription
+  - other                        # Other delivery modes
+
