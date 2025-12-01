@@ -1,6 +1,5 @@
 # Comparable Companies Engine
 
-**Production-grade pipeline for finding comparable public companies using multi-signal ranking with economic signature matching.**
 
 ## Strategic Overview
 
