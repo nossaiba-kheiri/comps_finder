@@ -114,6 +114,16 @@ def construct_target_profile_text(target: Dict) -> str:
         parts.append(target.get('text_profile'))
     
     target_profile_text = ' '.join(parts)
+    
+    # Fallback: If no profile text was constructed, use business_description
+    if not target_profile_text or len(target_profile_text.strip()) == 0:
+        business_description = target.get('business_description', '')
+        if business_description:
+            target_profile_text = business_description
+        else:
+            # Last resort: use company name
+            target_profile_text = target.get('name', '')
+    
     return basic_clean(target_profile_text)
 
 
@@ -274,7 +284,7 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
     print(f"  Path A: Semantic KNN (top {K_semantic})...")
     S_fast = {}
     
-    if os.path.exists(FAISS_PATH) and os.path.exists(META_PATH):
+    if os.path.exists(FAISS_PATH) and os.path.exists(META_PATH) and target_emb is not None:
         try:
             index = faiss.read_index(FAISS_PATH)
             meta_df = pd.read_parquet(META_PATH)
@@ -299,6 +309,9 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
         except Exception as e:
             print(f"    Warning: FAISS search failed: {e}")
             S_fast = {}
+    elif target_emb is None:
+        print(f"    Warning: Target embedding failed (likely rate limit), skipping semantic search")
+        S_fast = {}
     else:
         print(f"    Warning: FAISS index not found, skipping semantic search")
         S_fast = {}
@@ -342,6 +355,10 @@ def prelim_filter(target: Dict, config: Dict, run_with_openai: bool = False) -> 
         try:
             # Embed target keywords
             keyword_emb = get_cached_embedding(target_keyword_text, run_with_openai=run_with_openai)
+            
+            # Skip if embedding failed (e.g., rate limit)
+            if keyword_emb is None:
+                raise ValueError("Embedding returned None (likely rate limit)")
             
             # Query FAISS index (same as Path A, but with keyword text instead of full profile)
             index = faiss.read_index(FAISS_PATH)

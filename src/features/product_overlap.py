@@ -167,17 +167,27 @@ def score_product_overlap(target_products, candidate_business_activity, taxonomy
                             if idx_in_all < len(batch_embeddings):
                                 candidate_embeddings_dict[ca] = batch_embeddings[idx_in_all]
                 except Exception as e:
-                    # If batch embedding fails, fall back to individual calls
+                    # If batch embedding fails, fall back to individual calls with error handling
                     import warnings
                     warnings.warn(f"Batch embedding failed, using individual calls: {e}")
                     for tp in target_texts_needing_embed:
-                        emb = get_cached_embedding(tp, run_with_openai=run_with_openai)
-                        if emb is not None:
-                            target_embeddings_dict[tp] = emb
+                        try:
+                            emb = get_cached_embedding(tp, run_with_openai=run_with_openai)
+                            if emb is not None:
+                                target_embeddings_dict[tp] = emb
+                        except Exception as embed_error:
+                            # Skip this embedding if it fails (connection error, API error, etc.)
+                            warnings.warn(f"Failed to get embedding for '{tp[:50]}...': {embed_error}")
+                            continue
                     for ca in candidate_texts_needing_embed:
-                        emb = get_cached_embedding(ca, run_with_openai=run_with_openai)
-                        if emb is not None:
-                            candidate_embeddings_dict[ca] = emb
+                        try:
+                            emb = get_cached_embedding(ca, run_with_openai=run_with_openai)
+                            if emb is not None:
+                                candidate_embeddings_dict[ca] = emb
+                        except Exception as embed_error:
+                            # Skip this embedding if it fails (connection error, API error, etc.)
+                            warnings.warn(f"Failed to get embedding for '{ca[:50]}...': {embed_error}")
+                            continue
             
             # Convert dictionaries to lists
             target_embeddings = [(tp, target_embeddings_dict[tp]) for tp in target_lower if tp in target_embeddings_dict]

@@ -2,14 +2,21 @@
 # Override defaults in scoring_config.py by editing this file
 
 weights:
-  P: 0.20  # Product overlap (materiality-weighted, using NLP embeddings)
-  C: 0.20  # Customer overlap (segment/customer matching)
-  S: 0.20  # Segment distribution similarity (portfolio-aware, replaces M)
-  B: 0.15  # Business model similarity (services_share, business_model_type, capabilities)
-  V: 0.20  # Vertical similarity (multi-hot encoding of vertical categories) - NEW
+  P: 0.15  # Product overlap (materiality-weighted, using NLP embeddings)
+  C: 0.10  # Customer overlap (segment/customer matching) - REDUCED (less important for industrial)
+  S: 0.10  # Segment distribution similarity (portfolio-aware, replaces M) - REDUCED
+  B: 0.10  # Business model similarity (services_share, business_model_type, capabilities) - LEGACY
+  V: 0.10  # Vertical similarity (multi-hot encoding of vertical categories)
+  E_SIG: 0.40  # Economic signature similarity (universal economic structure matching) - PRIMARY FEATURE
   I: 0.03  # Industry proximity (small hint, not a filter)
   E: 0.01  # Evidence quality
   R: 0.01  # Recency
+
+# NEW: Economic Archetype Matching Configuration
+# Uses capacity_unit, pricing_basis, demand_matching_role, etc. for economic model matching
+archetype:
+  weight: 0.4  # Weight of archetype similarity in final score (0-1). Mixes with base linear score.
+  # Increased from 0.2 to 0.4 to better filter out anti-comps (e.g., REITs vs hospitality aggregators)
 
 business_model:
   disallowed_types:

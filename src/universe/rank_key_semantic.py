@@ -164,8 +164,11 @@ def compute_segment_mix_similarity_fast(
     # and we don't have real segment_mix, treat it as unreliable and return neutral
     if not has_real_segment_mix and candidate_dist:
         # Check if candidate_segment contains industry/sector terms (unreliable)
-        candidate_industry = str(candidate_data.get('industry', '')).lower()
-        candidate_sector = str(candidate_data.get('sector', '')).lower()
+        # Ensure values are strings before calling .lower()
+        candidate_industry_raw = candidate_data.get('industry', '')
+        candidate_sector_raw = candidate_data.get('sector', '')
+        candidate_industry = str(candidate_industry_raw).lower() if candidate_industry_raw is not None else ''
+        candidate_sector = str(candidate_sector_raw).lower() if candidate_sector_raw is not None else ''
         
         # If customer_segment matches own industry/sector, it's unreliable
         segment_is_own_industry = any(
@@ -230,15 +233,20 @@ def compute_industry_match_bonus(
     if not candidate_industry:
         return 0.0
     
-    candidate_industry_lower = candidate_industry.lower()
-    candidate_sector_lower = candidate_sector.lower() if candidate_sector else ''
+    # Ensure values are strings before calling .lower()
+    candidate_industry_str = str(candidate_industry) if candidate_industry is not None else ''
+    candidate_sector_str = str(candidate_sector) if candidate_sector is not None else ''
+    candidate_industry_lower = candidate_industry_str.lower()
+    candidate_sector_lower = candidate_sector_str.lower()
     
     # Get target's main industry
-    primary_industry = str(target_data.get('primary_industry_classification', '')).lower()
+    primary_industry_raw = target_data.get('primary_industry_classification', '')
+    primary_industry = str(primary_industry_raw).lower() if primary_industry_raw is not None else ''
     similar_industries = target_data.get('similar_industries', [])
     if not isinstance(similar_industries, list):
         similar_industries = []
-    similar_industries_lower = [str(ind).lower() for ind in similar_industries]
+    # Ensure all items are strings before calling .lower()
+    similar_industries_lower = [str(ind).lower() if ind is not None else '' for ind in similar_industries]
     
     # Check exact match with primary industry
     # Be strict: require substantial overlap, not just one word
@@ -251,7 +259,7 @@ def compute_industry_match_bonus(
             if matches >= 2 and len(primary_terms) >= 2:
                 # Check if candidate industry is a subset or very similar (not just "Specialty Business Services" matching "Business Services")
                 # Reject if candidate has extra words that change meaning (e.g., "Specialty" prefix)
-                if 'specialty' in candidate_industry_lower and 'specialty' not in primary_industry.lower():
+                if 'specialty' in candidate_industry_lower and 'specialty' not in primary_industry:
                     return 0.7  # Downgrade "Specialty X" matching "X"
                 return 1.0
     
@@ -330,7 +338,9 @@ def compute_model_similarity_fast(
         # For now, use a simple heuristic based on summary keywords
         # This is a fast approximation - full LLM extraction will refine this later
         
-        candidate_lower = str(candidate_summary).lower() + ' ' + str(candidate_industry).lower()
+        # Ensure candidate_industry is a string before calling .lower()
+        candidate_industry_str = str(candidate_industry) if candidate_industry is not None else ''
+        candidate_lower = str(candidate_summary).lower() + ' ' + candidate_industry_str.lower()
         
         # Infer candidate archetype distribution from keywords
         # This is a heuristic - full extraction will be more accurate
@@ -469,10 +479,13 @@ def compute_rank_key_semantic(
     industry_boost = 0.0
     if industry_bonus >= 0.5:  # Any industry match (hierarchical bonus already applied)
         # Check which position in similar_industries list the match is at
-        candidate_industry_lower = str(candidate_data.get('industry', '')).lower()
+        # Ensure candidate_industry is a string before calling .lower()
+        candidate_industry_raw = candidate_data.get('industry', '')
+        candidate_industry_lower = str(candidate_industry_raw).lower() if candidate_industry_raw is not None else ''
         similar_industries = target.get('similar_industries', [])
         if isinstance(similar_industries, list):
-            similar_industries_lower = [str(ind).lower() for ind in similar_industries]
+            # Ensure all items are strings before calling .lower()
+            similar_industries_lower = [str(ind).lower() if ind is not None else '' for ind in similar_industries]
             # Find the position of the match
             for idx, similar_ind in enumerate(similar_industries_lower):
                 if candidate_industry_lower == similar_ind or similar_ind in candidate_industry_lower:

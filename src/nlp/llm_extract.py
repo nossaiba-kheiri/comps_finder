@@ -115,6 +115,27 @@ Return ONLY valid JSON matching this exact schema:
   "exchange": "exchange code if mentioned",
   "business_model_type": "services" | "software" | "hybrid_services_software" | "marketplace" | "hardware" | "financial_institution" | "other",
   "revenue_model": ["project_fees" | "time_and_materials" | "retainers" | "managed_services" | "transaction_fees" | "subscription_software" | "perpetual_license" | "usage_based" | "other"],
+  "economic_signature": {{
+    # Legacy fields (keep for backward compatibility):
+    "capital_equipment_share": 0.0-1.0,  # % revenue from capital equipment/machinery sales
+    "aftermarket_service_share": 0.0-1.0,  # % revenue from aftermarket parts, service contracts, maintenance
+    "consumables_share": 0.0-1.0,  # % revenue from consumables/parts (razor-blade model)
+    "software_recurring_share": 0.0-1.0,  # % revenue from software subscriptions/licenses
+    "project_services_share": 0.0-1.0,  # % revenue from project-based services (implementation, installation, custom engineering)
+    "ip_intensity": 0.0-1.0,  # Proprietary technology/IP intensity (0=commodity, 1=highly proprietary)
+    "customer_lock_in": 0.0-1.0,  # Switching costs/installed base dependency (0=low, 1=very high)
+    "replacement_cycle_years": 0.0-20.0,  # Average replacement/refresh cycle in years
+    "gross_margin_tier": "low" | "medium" | "high" | "very_high",  # Gross margin tier
+    "asset_intensity": 0.0-1.0,  # Asset-heavy business model (0=light, 1=heavy assets)
+    # NEW: Archetype matching fields (REQUIRED for economic archetype classification):
+    "capacity_unit": "hours" | "nights" | "square_feet" | "units_sold" | "MW" | "none",  # Unit of capacity the company sells
+    "pricing_basis": ["time_and_materials" | "fixed_fee" | "subscription" | "ADR" | "commission" | "rent" | "product_sale"],  # How pricing is structured
+    "asset_intensity_0_1": 0.0-1.0,  # Asset intensity (0=asset-light, 1=asset-heavy) - same as asset_intensity above, duplicate for archetype matching
+    "revenue_recurring_0_1": 0.0-1.0,  # % of revenue that is recurring/recurring contracts (0=all one-time, 1=all recurring)
+    "inventory_fragmentation_0_1": 0.0-1.0,  # How fragmented the inventory/portfolio is (0=single product/service, 1=many small units like vacation rentals)
+    "demand_matching_role": "none" | "aggregator" | "marketplace" | "vertically_integrated",  # Company's role in matching supply/demand
+    "utilization_metric": "hours_utilized" | "occupancy" | "throughput" | "none"  # Key utilization metric for the business
+  }},
   "revenue_archetypes": {{"unit_of_work": 0.0-1.0, "access_capability": 0.0-1.0, "performance_outcome": 0.0-1.0, "intermediation": 0.0-1.0}},
   "revenue_channels": {{"license_upfront": 0.0-1.0, "subscription_recurring": 0.0-1.0, "usage_based": 0.0-1.0, "transaction_fees": 0.0-1.0, "professional_services_project": 0.0-1.0, "managed_services": 0.0-1.0, "data_license": 0.0-1.0, "commission_take_rate": 0.0-1.0, "marketplace_take_rate": 0.0-1.0, "hardware_sales": 0.0-1.0, "consumables_replace": 0.0-1.0, "financing_fee": 0.0-1.0, "advertising": 0.0-1.0, "embedded_finance": 0.0-1.0, "grants": 0.0-1.0, "government_contracts_fixed": 0.0-1.0, "government_contracts_time_material": 0.0-1.0, "enterprise_custom_deal": 0.0-1.0, "tokenomics": 0.0-1.0, "other": 0.0-1.0}},
   "revenue_model_mix": {{"one_time_license": 0.0-1.0, "recurring_subscription": 0.0-1.0, "usage_based": 0.0-1.0, "transaction_fees": 0.0-1.0, "professional_services_project": 0.0-1.0, "managed_services_recurring": 0.0-1.0, "hardware_sales": 0.0-1.0, "marketplace_take_rate": 0.0-1.0, "advertising": 0.0-1.0, "other": 0.0-1.0}},
@@ -176,6 +197,48 @@ This is Layer 1 - the PRIMARY classification (most important for comparability).
 
 revenue_channels: Dict mapping specific revenue channels to percentages (0.0-1.0). Values should sum to approximately 1.0.
 This is Layer 2 - specific monetization mechanisms. Include ALL channels that apply, even if small.
+
+economic_signature: Dict mapping economic structure components (HOW the company makes money). This is CRITICAL for finding true economic comparables across all industries.
+This captures the fundamental economic physics of the business model, not just customer segments.
+- capital_equipment_share: % revenue from capital equipment/machinery sales (e.g., injection molding machines, PET systems, automation equipment). For industrial equipment companies, this is typically 60-70%. For SaaS companies, this is 0%.
+- aftermarket_service_share: % revenue from aftermarket parts, service contracts, maintenance, lifecycle services. For capital equipment companies with installed base, this is typically 20-30%. For pure SaaS, this is 0%.
+- consumables_share: % revenue from consumables/replacement parts (razor-blade model). For companies like Nordson (adhesive consumables), this can be 20-30%. For capital equipment-only companies, this is typically 0-10%.
+- software_recurring_share: % revenue from software subscriptions/licenses/embedded controls. For SaaS companies, this is 80-90%. For industrial equipment with embedded software, this might be 5-15%.
+- project_services_share: % revenue from project-based services (implementation, installation, custom engineering, consulting). For consulting firms, this is 70-90%. For capital equipment companies, this might be 10-20% (installation/implementation).
+- ip_intensity: Proprietary technology/IP intensity (0=commodity/distributor/reseller, 1=highly proprietary/engineered systems). For companies like Husky, Nordson, Kadant with proprietary engineered systems, this is 0.8-1.0. For distributors/resellers, this is 0.1-0.3.
+- customer_lock_in: Switching costs/installed base dependency (0=low/no lock-in, 1=very high). For capital equipment companies with custom tooling, molds, embedded systems, this is 0.7-1.0. For commodity products, this is 0.1-0.3.
+- replacement_cycle_years: Average replacement/refresh cycle in years. For capital equipment (injection molding, industrial automation), this is typically 8-15 years. For consumables, this is <1 year (monthly/quarterly). For software subscriptions, this is 1-3 years (annual renewals).
+- gross_margin_tier: Gross margin tier - "low" (0-30%), "medium" (30-50%), "high" (50-70%), "very_high" (70%+). For SaaS companies, this is "very_high" (75-85%). For capital equipment manufacturing, this is typically "medium" (35-45%). For distributors/resellers, this is "low" (15-25%).
+- asset_intensity: Asset-heavy business model (0=asset-light/SaaS, 1=heavy manufacturing/assets). For capital equipment manufacturers, this is 0.7-0.9. For SaaS companies, this is 0.1-0.2.
+
+EXAMPLES:
+- Husky Technologies (injection molding equipment): capital_equipment_share=0.65, aftermarket_service_share=0.25, consumables_share=0.05, software_recurring_share=0.05, ip_intensity=0.9, customer_lock_in=0.9, replacement_cycle_years=10, gross_margin_tier="medium", asset_intensity=0.8
+- Nordson (adhesive dispensing): capital_equipment_share=0.4, aftermarket_service_share=0.2, consumables_share=0.3, software_recurring_share=0.1, ip_intensity=0.85, customer_lock_in=0.8, replacement_cycle_years=8, gross_margin_tier="high", asset_intensity=0.7
+- SaaS Company: capital_equipment_share=0.0, aftermarket_service_share=0.0, consumables_share=0.0, software_recurring_share=0.85, project_services_share=0.15, ip_intensity=0.8, customer_lock_in=0.6, replacement_cycle_years=1, gross_margin_tier="very_high", asset_intensity=0.1
+- Consulting Firm: capital_equipment_share=0.0, aftermarket_service_share=0.0, consumables_share=0.0, software_recurring_share=0.0, project_services_share=0.85, ip_intensity=0.3, customer_lock_in=0.2, replacement_cycle_years=0.5, gross_margin_tier="medium", asset_intensity=0.2
+
+NEW ARCHETYPE MATCHING FIELDS (REQUIRED in economic_signature):
+You must also return the following fields in economic_signature for archetype classification:
+
+- capacity_unit: One of ["hours", "nights", "square_feet", "units_sold", "MW", "none"]. The unit of capacity the company sells. Examples: "hours" for consulting, "nights" for vacation rentals, "units_sold" for equipment, "none" if not applicable.
+- pricing_basis: Array of any of ["time_and_materials", "fixed_fee", "subscription", "ADR", "commission", "rent", "product_sale"]. How pricing is structured. Examples: ["time_and_materials", "fixed_fee"] for consulting, ["ADR", "commission"] for vacation rentals, ["product_sale"] for equipment.
+- revenue_recurring_0_1: Float 0.0-1.0. % of revenue that is recurring/recurring contracts. 0.0 = all one-time sales, 1.0 = all recurring subscriptions/rentals. For SaaS/rentals, typically 0.7-0.9. For capital equipment, typically 0.1-0.3.
+- inventory_fragmentation_0_1: Float 0.0-1.0. How fragmented the inventory/portfolio is. 0.0 = single product/service, 1.0 = many small units. Examples: 0.8 for vacation rental aggregators (many properties), 0.2 for capital equipment (few product lines), 0.0 for consulting (no inventory).
+- demand_matching_role: One of ["none", "aggregator", "marketplace", "vertically_integrated"]. Company's role in matching supply/demand. "aggregator" for vacation rental platforms, "marketplace" for two-sided platforms, "vertically_integrated" for companies that own assets, "none" for direct sellers.
+- utilization_metric: One of ["hours_utilized", "occupancy", "throughput", "none"]. Key utilization metric for the business. "hours_utilized" for consulting, "occupancy" for rentals/hotels, "throughput" for equipment/manufacturing, "none" if not applicable.
+
+IMPORTANT: Always fill all NEW fields. If something clearly does not apply, use "none" or 0.0. Be consistent across companies in the same industry.
+
+EXAMPLES WITH NEW FIELDS:
+- Awaze (vacation rentals): capacity_unit="nights", pricing_basis=["ADR", "commission"], asset_intensity_0_1=0.3, revenue_recurring_0_1=0.5, inventory_fragmentation_0_1=0.8, demand_matching_role="aggregator", utilization_metric="occupancy"
+- Husky Technologies (industrial equipment): capacity_unit="units_sold", pricing_basis=["product_sale", "time_and_materials"], asset_intensity_0_1=0.8, revenue_recurring_0_1=0.2, inventory_fragmentation_0_1=0.2, demand_matching_role="vertically_integrated", utilization_metric="throughput"
+- Consulting Firm: capacity_unit="hours", pricing_basis=["time_and_materials", "fixed_fee"], asset_intensity_0_1=0.15, revenue_recurring_0_1=0.4, inventory_fragmentation_0_1=0.0, demand_matching_role="none", utilization_metric="hours_utilized"
+
+CRITICAL: Extract economic_signature even if revenue breakdown is not explicitly stated. Infer from:
+- Business description (e.g., "injection molding machines" → capital_equipment_share high)
+- Revenue model mentions (e.g., "service contracts", "aftermarket parts" → aftermarket_service_share)
+- Customer references (e.g., "custom tooling", "embedded systems" → high customer_lock_in)
+- Industry patterns (industrial equipment → capital equipment + aftermarket; SaaS → software recurring)
 - "license_upfront": One-time software license sales (perpetual licenses)
 - "subscription_recurring": Recurring SaaS/subscription software revenue
 - "usage_based": Pay-per-use pricing (API calls, compute hours)
@@ -314,7 +377,56 @@ Return ONLY the JSON object, no other text."""
                     response_text = response_text[4:]
                 response_text = response_text.strip()
             
-            extracted = json.loads(response_text)
+            # Try to parse JSON, with repair attempts for common issues
+            extracted = None
+            try:
+                extracted = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                # Try to repair common JSON issues
+                import re
+                # Attempt 1: Fix unterminated strings by finding the last complete JSON structure
+                # Find the last complete closing brace
+                last_brace = response_text.rfind('}')
+                if last_brace > 0:
+                    try:
+                        # Try parsing up to the last complete brace
+                        repaired = response_text[:last_brace + 1]
+                        extracted = json.loads(repaired)
+                    except json.JSONDecodeError:
+                        pass
+                
+                # Attempt 2: If still failing, try to extract JSON object from the text
+                if extracted is None:
+                    # Find JSON object boundaries
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        try:
+                            extracted = json.loads(json_match.group(0))
+                        except json.JSONDecodeError:
+                            pass
+                
+                # Attempt 3: If still failing, try to fix common issues manually
+                if extracted is None:
+                    # Try to fix unescaped quotes in strings (basic heuristic)
+                    # This is a simple fix - for more complex cases, we'll fall back to mock
+                    try:
+                        # Replace unescaped newlines in strings
+                        repaired = response_text.replace('\n', '\\n').replace('\r', '\\r')
+                        # Try to close unterminated strings
+                        if '"' in repaired and repaired.count('"') % 2 != 0:
+                            # Odd number of quotes - try to close the last string
+                            last_quote = repaired.rfind('"')
+                            if last_quote > 0 and repaired[last_quote-1] != '\\':
+                                # Add closing quote if it's not escaped
+                                repaired = repaired[:last_quote+1] + '"' + repaired[last_quote+1:]
+                        extracted = json.loads(repaired)
+                    except (json.JSONDecodeError, Exception):
+                        # If all repair attempts fail, raise the original error
+                        raise e
+            
+            # If we still don't have valid JSON, raise an error to trigger fallback
+            if extracted is None:
+                raise json.JSONDecodeError("Could not parse JSON after repair attempts", response_text, 0)
             
             # Validate and set defaults
             # Wrap in try-except to avoid sys scoping errors
@@ -329,12 +441,23 @@ Return ONLY the JSON object, no other text."""
             if use_cache and run_with_llm and ticker:
                 try:
                     from nlp.llm_extract_cache import save_cached_extraction
-                    save_cached_extraction(ticker, evidence_pack, extracted, prompt_version)
-                except Exception:
-                    # Non-critical - continue even if caching fails
-                    pass
+                    saved = save_cached_extraction(ticker, evidence_pack, extracted, prompt_version)
+                    if saved:
+                        # Log first few saves to confirm caching is working
+                        # (Silent after first 5 to reduce log spam)
+                        pass  # Will be logged in batch at end of extraction loop
+                except Exception as e:
+                    # Log warning but don't fail
+                    import warnings
+                    warnings.warn(f"Cache save failed for {ticker}: {e}", stacklevel=2)
             
             return extracted
+        except json.JSONDecodeError as e:
+            # JSON parsing error - log and fall back to mock
+            print(f"    ERROR: Failed to parse JSON for {ticker}: {e}")
+            print(f"    Falling back to mock extraction for {ticker}")
+            # Fall back to mock
+            return _mock_extraction(ticker, sources, combined_text, segment_mix_xbrl, has_10k, prompt_version)
         except Exception as e:
             print(f"    ERROR: Failed LLM extraction for {ticker}: {e}")
             try:
@@ -790,6 +913,12 @@ def _validate_extraction(extracted, sources, has_10k):
         if not delivery_modes:
             delivery_modes.append("other")
         extracted['delivery_modes'] = delivery_modes
+    
+    # Extract economic_signature if LLM provided it, otherwise infer from revenue_channels
+    if 'economic_signature' not in extracted or not extracted.get('economic_signature'):
+        # Infer economic signature from revenue_channels and business model
+        from features.economic_signature import extract_economic_signature_from_llm
+        extracted['economic_signature'] = extract_economic_signature_from_llm(extracted)
     
     # POST-PROCESSING VALIDATION: Fix obvious misclassifications
     revenue_model = extracted.get('revenue_model', [])

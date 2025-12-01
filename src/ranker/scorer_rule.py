@@ -184,6 +184,96 @@ def compute_segment_overlap(row_or_dict, target_profile):
     return len(target_set & candidate_set)
 
 
+def gate_hospitality_keywords(row_or_dict, target_profile, config=None):
+    """
+    Minimal keyword-based gate for hospitality/vacation rental targets.
+    
+    Checks if candidate has hospitality keywords in business_activity, customer_segment,
+    or business_description. This is a simple but effective filter to exclude REITs,
+    real estate investment companies, and other non-hospitality businesses.
+    
+    Args:
+        row_or_dict: Dict/Series with business_activity, customer_segment, or business_description
+        target_profile: Target JSON dict (used to determine if this gate should be active)
+        config: Optional scoring config dict
+    
+    Returns:
+        bool: True if passes gate (has keywords or gate not active), False otherwise
+    """
+    if config is None:
+        config = SCORING_CONFIG
+    
+    # Check if this gate is enabled for the target
+    # Only apply if target is hospitality/vacation rental related
+    target_desc = (target_profile.get('business_description', '') or '').lower()
+    target_activity = ' '.join([str(a).lower() for a in target_profile.get('business_activity', [])])
+    
+    # Check if target is hospitality-related
+    hospitality_keywords = [
+        'vacation rental', 'holiday rental', 'short-term rental', 'booking platform',
+        'hospitality', 'hotel', 'resort', 'accommodation', 'lodging'
+    ]
+    is_hospitality_target = any(kw in target_desc or kw in target_activity for kw in hospitality_keywords)
+    
+    if not is_hospitality_target:
+        # Gate not applicable - always pass
+        return True
+    
+    # Get keywords from config (configurable, not hardcoded)
+    cfg = config.get("hospitality_keywords", {})
+    required_keywords = cfg.get("keywords", [
+        "hotel", "hotels", "resort", "resorts", "vacation rental",
+        "holiday park", "campground", "glamping", "campsite",
+        "guest", "traveller", "tourist", "stay", "short stay",
+        "lodging", "hospitality", "bookings", "reservations"
+    ])
+    
+    # Get candidate text from multiple sources
+    candidate_texts = []
+    
+    # Helper to extract text from various formats
+    def extract_text(value):
+        if not value:
+            return ''
+        if isinstance(value, list):
+            return ' '.join([str(v).lower() for v in value if v])
+        return str(value).lower()
+    
+    # From business_activity (can be list, comma-separated string, or in extracted_data)
+    business_activity = row_or_dict.get('business_activity', '')
+    if not business_activity:
+        # Try extracted_data if available
+        if hasattr(row_or_dict, 'get'):
+            extracted = row_or_dict.get('extracted_data', {}) or {}
+            business_activity = extracted.get('business_activity', [])
+    candidate_texts.append(extract_text(business_activity))
+    
+    # From customer_segment (can be list, comma-separated string, or in extracted_data)
+    customer_segment = row_or_dict.get('customer_segment', '')
+    if not customer_segment:
+        # Try extracted_data if available
+        if hasattr(row_or_dict, 'get'):
+            extracted = row_or_dict.get('extracted_data', {}) or {}
+            customer_segment = extracted.get('customer_segment', [])
+    candidate_texts.append(extract_text(customer_segment))
+    
+    # From business_description (if available)
+    business_desc = row_or_dict.get('business_description', '')
+    if not business_desc and hasattr(row_or_dict, 'get'):
+        extracted = row_or_dict.get('extracted_data', {}) or {}
+        business_desc = extracted.get('business_description', '')
+    if business_desc:
+        candidate_texts.append(str(business_desc).lower())
+    
+    # Combine all candidate text
+    combined_text = ' '.join(candidate_texts).lower()
+    
+    # Check if any required keyword appears in candidate text
+    has_keyword = any(keyword.lower() in combined_text for keyword in required_keywords)
+    
+    return has_keyword
+
+
 def gate_segments(row_or_dict, target_profile, config=None, vocabulary=None):
     """
     Generic segment/customer overlap gate using continuous segment distribution vectors.
@@ -352,34 +442,37 @@ def compute_base_score(features, config=None):
     P = float(features.get('P', 0.0))
     C = float(features.get('C', 0.0))
     S = float(features.get('S', 0.0))
-    B = float(features.get('B', 0.0))  # Business model similarity
-    V = float(features.get('V', 0.0))  # NEW: Vertical similarity (multi-hot encoding)
+    B = float(features.get('B', 0.0))  # Legacy: Business model similarity
+    V = float(features.get('V', 0.0))  # Vertical similarity (multi-hot encoding)
+    E_SIG = float(features.get('E_SIG', 0.0))  # NEW: Economic signature similarity (universal economic structure matching)
     I = float(features.get('I', 0.5))  # Default to neutral if missing
     E = float(features.get('E', 0.0))
     R = float(features.get('R', 0.5))  # Default to neutral if missing
     
     # Get weights (with defaults)
-    w_P = weights.get('P', 0.25)
-    w_C = weights.get('C', 0.25)
-    w_S = weights.get('S', 0.25)
-    w_B = weights.get('B', 0.15)  # Business model similarity weight
-    w_V = weights.get('V', 0.20)  # NEW: Vertical similarity weight (high - important for vertical matching)
-    w_I = weights.get('I', 0.05)
-    w_E = weights.get('E', 0.03)
-    w_R = weights.get('R', 0.02)
+    w_P = weights.get('P', 0.15)
+    w_C = weights.get('C', 0.10)
+    w_S = weights.get('S', 0.10)
+    w_B = weights.get('B', 0.10)  # Legacy business model similarity weight
+    w_V = weights.get('V', 0.10)  # Vertical similarity weight
+    w_E_SIG = weights.get('E_SIG', 0.40)  # Economic signature similarity - PRIMARY FEATURE
+    w_I = weights.get('I', 0.03)
+    w_E = weights.get('E', 0.01)
+    w_R = weights.get('R', 0.01)
     
     # SIC industry bonus (small hint, not a filter)
     # Treat same SIC/industry as a small bonus (0.05 weight)
     same_sic = float(features.get('same_sic', 0.0))
     w_sic_bonus = 0.05  # Small weight - don't want to lose cross-SIC comps
     
-    # Compute weighted score (includes B and V)
+    # Compute weighted score (includes E_SIG as primary feature)
     score_linear = (
         w_P * P +
         w_C * C +
         w_S * S +
-        w_B * B +  # Business model similarity
-        w_V * V +  # NEW: Vertical similarity (multi-hot encoding)
+        w_B * B +  # Legacy business model similarity
+        w_V * V +  # Vertical similarity
+        w_E_SIG * E_SIG +  # NEW: Economic signature similarity (universal matching)
         w_I * I +
         w_E * E +
         w_R * R +
@@ -680,8 +773,30 @@ def rule_score(features, target_profile=None, extracted_data=None, config=None):
         if extracted_data:
             row_for_gates.update(extracted_data)
         gate_details['segments'] = True  # Always pass now (soft penalties handle filtering)
+        
+        # NEW: Hospitality keywords gate (minimal rule-based filter)
+        # This is a HARD gate - filters out REITs and non-hospitality companies
+        gate_details['hospitality_keywords'] = gate_hospitality_keywords(
+            row_for_gates, target_profile, config
+        )
+        
+        # NEW: Economic engine gate (ensures same revenue mechanism)
+        # This is a HARD gate - filters out companies with different economic engines
+        # e.g., Awaze (revenue per night) vs REITs (revenue per square foot)
+        try:
+            from ranker.gate_economic_engine import gate_economic_engine
+            gate_details['economic_engine'] = gate_economic_engine(
+                row_for_gates, target_profile, config
+            )
+        except Exception as e:
+            # If gate fails, default to pass (don't break pipeline)
+            import warnings
+            warnings.warn(f"Economic engine gate failed: {e}, defaulting to pass", stacklevel=2)
+            gate_details['economic_engine'] = True
     else:
         gate_details['segments'] = True  # Pass if no target_profile provided
+        gate_details['hospitality_keywords'] = True  # Pass if no target_profile
+        gate_details['economic_engine'] = True  # Pass if no target_profile
     
     # Legacy gates (product_hits, customer_hits)
     gates = config.get('gates', {})
@@ -727,7 +842,15 @@ def rule_score(features, target_profile=None, extracted_data=None, config=None):
     gate_details['similarity_scale_segment'] = segment_similarity
     
     # All gates must pass (soft penalties handle filtering)
-    passed_gates = True
+    # Check if all gates passed (including hospitality_keywords and economic_engine gates)
+    passed_gates = all([
+        gate_details.get('business_model', True),
+        gate_details.get('segments', True),
+        gate_details.get('hospitality_keywords', True),  # NEW: Must pass hospitality keywords gate
+        gate_details.get('economic_engine', True),  # NEW: Must pass economic engine gate
+        gate_details.get('product_hits', True),
+        gate_details.get('customer_hits', True)
+    ])
     
     # Return score_adjusted (0-1 scale) for ranking, in addition to score_100 (0-100 scale)
     return score_100, pct_dict, passed_gates, gate_details, score_adjusted

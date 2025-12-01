@@ -658,10 +658,21 @@ def compute_features(target, candidate_row, extracted_data, evidence_pack, run_w
     updated_at = evidence_pack.get('updated_at', '')
     R = score_recency(updated_at)
     
-    # B: Business model similarity (NEW - explicit business model similarity term)
-    # Compares services_share, business_model_type, and required capabilities
+    # B: Business model similarity (legacy - still computed for backward compatibility)
     from features.business_model_similarity import business_model_similarity
     B = business_model_similarity(target, extracted_data)
+    
+    # E_SIG: Economic signature similarity (NEW - universal economic structure matching)
+    # Compares HOW companies make money (revenue structure, IP, lock-in, cycles)
+    # Works universally across all industries - not dependent on customer segments
+    try:
+        from features.economic_model_similarity import compute_economic_model_similarity_from_extracted
+        target_extracted = target.get('extracted_data', {}) or {}
+        E_SIG = compute_economic_model_similarity_from_extracted(target_extracted, extracted_data)
+    except Exception as e:
+        # Fallback if economic signature computation fails
+        print(f"    Warning: Economic signature similarity computation failed: {e}")
+        E_SIG = 0.5  # Default to neutral similarity
     
     # Confidence (blended: LLM confidence + evidence coverage + E score)
     llm_confidence = extracted_data.get('confidence_0_1', 0.0)
@@ -675,8 +686,9 @@ def compute_features(target, candidate_row, extracted_data, evidence_pack, run_w
         'P': P,
         'C': C,
         'S': S,  # M removed - redundant with S
-        'B': B,  # NEW: Business model similarity
+        'B': B,  # Legacy: Business model similarity (services_share based)
         'V': V,  # NEW: Vertical similarity (multi-hot encoding of vertical categories)
+        'E_SIG': E_SIG,  # NEW: Economic signature similarity (universal economic structure matching)
         'I': I,
         'E': E,
         'R': R,
@@ -691,8 +703,9 @@ def compute_features(target, candidate_row, extracted_data, evidence_pack, run_w
         'P': P,
         'C': C,
         'S': S,  # Segment distribution similarity (portfolio-aware, replaces M)
-        'B': B,  # NEW: Business model similarity (services_share, business_model_type, capabilities)
-        'V': V,  # NEW: Vertical similarity (multi-hot encoding of vertical categories)
+        'B': B,  # Legacy: Business model similarity (services_share, business_model_type, capabilities)
+        'V': V,  # Vertical similarity (multi-hot encoding of vertical categories)
+        'E_SIG': E_SIG,  # NEW: Economic signature similarity (universal economic structure matching)
         'I': I,
         'E': E,
         'R': R,
@@ -829,7 +842,8 @@ Examples:
     print("\n[1/10] Loading configs and target...")
     config = load_config()
     target = load_target(target_path)
-    target_id = target.get('name', 'target').replace(' ', '_').lower()
+    # Sanitize target_id: remove special characters that cause path issues
+    target_id = target.get('name', 'target').replace(' ', '_').replace('(', '').replace(')', '').replace('/', '_').replace('\\', '_').replace(':', '').replace('*', '').replace('?', '').replace('"', '').replace('<', '').replace('>', '').replace('|', '').lower()
     mode = target.get('mode', 'all_segments')
     print(f"✓ Loaded target: {target.get('name')}")
     print(f"✓ Mode: {mode}")
@@ -869,7 +883,7 @@ Examples:
         name = row.get('name', 'N/A')[:50]
         rank_key = row.get('rank_key', 0.0)
         paths = row.get('paths', '')
-        industry = row.get('industry', 'N/A')[:30]
+        industry = str(row.get('industry', 'N/A'))[:30]
         print(f"   {idx:2d}. {ticker:6s} - {name:50s} | rank_key: {rank_key:.3f} | paths: {paths} | {industry}")
     
     # Save shortlist to file for inspection
@@ -947,6 +961,16 @@ Examples:
     # 5. LLM extraction
     print("\n[5/10] Extracting structured data with LLM...")
     
+    # Set run_with_llm flag early (needed for print statements below)
+    run_with_llm = args.openai  # Use LLM if OpenAI flag is set
+    
+    if run_with_llm:
+        print("  Using OpenAI LLM for extraction (--openai flag enabled)")
+        print("  ✓ Extractions will be cached to data/cache/llm_extraction/")
+    else:
+        print("  Using mock extraction (run with --openai for real LLM extraction)")
+        print("  ⚠️  Note: Mock extractions are NOT cached. Use --openai to enable caching.")
+    
     # Clear expired LLM extraction cache (non-blocking)
     try:
         from nlp.llm_extract_cache import clear_expired_extraction_cache
@@ -958,7 +982,6 @@ Examples:
     
     extracted_data = {}
     prompt_version = config.get('prompt_version', 'svc_cust_v3')
-    run_with_llm = args.openai  # Use LLM if OpenAI flag is set
     
     def _refine_business_model(extracted, pack):
         """
@@ -1085,6 +1108,38 @@ Examples:
     
     if len(extracted_data) < len(evidence_packs):
         print(f"  ⚠️  WARNING: Only {len(extracted_data)}/{len(evidence_packs)} companies have extraction data!")
+    
+    # Explicitly ensure all LLM extractions are saved to cache for later inspection
+    # This happens even if they were loaded from cache (refreshes metadata)
+    if run_with_llm:
+        cache_saved_count = 0
+        cache_failed_count = 0
+        try:
+            from nlp.llm_extract_cache import save_cached_extraction
+            for ticker, extracted in extracted_data.items():
+                if ticker in evidence_packs and extracted:
+                    try:
+                        pack = evidence_packs[ticker]
+                        saved = save_cached_extraction(ticker, pack, extracted, prompt_version)
+                        if saved:
+                            cache_saved_count += 1
+                        else:
+                            cache_failed_count += 1
+                    except Exception:
+                        cache_failed_count += 1
+            if cache_saved_count > 0:
+                print(f"  ✓ Saved {cache_saved_count} LLM extractions to cache (data/cache/llm_extraction/)")
+            if cache_failed_count > 0:
+                print(f"  ⚠️  Failed to cache {cache_failed_count} extractions (non-critical)")
+            if cache_saved_count == 0 and cache_failed_count == 0:
+                print(f"  ⚠️  WARNING: No extractions were cached! Check if run_with_llm=True and extractions exist.")
+        except Exception as e:
+            # Non-critical - pipeline continues even if cache save fails
+            import traceback
+            print(f"  ⚠️  Cache save error (non-critical): {e}")
+            traceback.print_exc()
+    else:
+        print("  ⚠️  LLM extractions not cached (run with --openai to enable caching)")
     
     # 5.5. Build segment vocabulary ONCE (before feature computation, for efficiency)
     # Try to load from cache first, then build if needed
@@ -1609,6 +1664,68 @@ Examples:
         if score_linear is None or pd.isna(score_linear):
             score_linear = compute_base_score(features_dict, SCORING_CONFIG)
         
+        # 1.5. Compute archetype similarity (NEW: economic signature matching)
+        archetype_similarity = 0.5  # Default neutral
+        archetype_info = {}
+        
+        # Get target's economic_signature - extract on-the-fly if not in target.json
+        target_sig = target.get('extracted_data', {}).get('economic_signature', {}) or target.get('economic_signature', {})
+        if not target_sig:
+            # Extract economic_signature from target's existing fields on-the-fly
+            # Use the same extraction logic as candidates
+            try:
+                from features.economic_signature import extract_economic_signature_from_llm
+                # Use target as if it were extracted_data - it has the same fields
+                target_sig = extract_economic_signature_from_llm(target)
+            except Exception:
+                # If extraction fails, target_sig stays empty (will use neutral score)
+                target_sig = {}
+        
+        # CRITICAL: If target_sig is missing NEW archetype fields, infer them from business description
+        # This is needed because targets created before the NEW schema don't have these fields
+        if not target_sig or not target_sig.get('capacity_unit') or target_sig.get('capacity_unit') == 'none':
+            try:
+                from features.archetype_inference import infer_archetype_fields_from_target
+                inferred_fields = infer_archetype_fields_from_target(target)
+                # Initialize target_sig if empty
+                if not target_sig:
+                    target_sig = {}
+                # Merge inferred fields into target_sig (don't overwrite if LLM provided them)
+                for key, value in inferred_fields.items():
+                    if key not in target_sig or not target_sig.get(key) or target_sig.get(key) == 'none' or target_sig.get(key) == []:
+                        target_sig[key] = value
+            except Exception as e:
+                # If inference fails, continue with what we have
+                import warnings
+                warnings.warn(f"Archetype inference failed for target: {e}", stacklevel=2)
+                pass
+        
+        candidate_sig = extracted.get('economic_signature', {})
+        
+        if target_sig and candidate_sig:
+            try:
+                from features.archetypes import load_archetypes, pair_archetype_similarity
+                archetypes = load_archetypes()
+                archetype_info = pair_archetype_similarity(
+                    target_sig_dict=target_sig,
+                    candidate_sig_dict=candidate_sig,
+                    archetypes=archetypes
+                )
+                archetype_similarity = archetype_info.get('similarity', 0.5)
+            except Exception as e:
+                # If archetype computation fails, continue with neutral score
+                import warnings
+                warnings.warn(f"Archetype similarity computation failed for {ticker}: {e}", stacklevel=2)
+        
+        # Mix archetype similarity into base score (configurable weight)
+        w_arch = SCORING_CONFIG.get('archetype', {}).get('weight', 0.2)  # Default 20% weight
+        score_with_archetype = (1.0 - w_arch) * score_linear + w_arch * archetype_similarity
+        score_linear = float(np.clip(score_with_archetype, 0.0, 1.0))
+        
+        # Store archetype info for later use
+        features_dict['archetype_similarity_new'] = archetype_similarity
+        features_dict['archetype_info'] = archetype_info
+        
         # 2. Apply business model penalty (uses target profile for dynamic anchor)
         penalty_value, score_adjusted = apply_business_model_penalty(
             score_linear, extracted, SCORING_CONFIG, target
@@ -1639,6 +1756,8 @@ Examples:
             'passed_gates': passed_gates,
             'gate_business_model': gate_details.get('business_model', False),
             'gate_segments': gate_details.get('segments', False),
+            'gate_hospitality_keywords': gate_details.get('hospitality_keywords', True),  # NEW: Hospitality keywords gate
+            'gate_economic_engine': gate_details.get('economic_engine', True),  # NEW: Economic engine gate
             'gate_product_hits': gate_details.get('product_hits', False),
             'gate_customer_hits': gate_details.get('customer_hits', False),
             'business_model_type': extracted.get('business_model_type', 'other'),
@@ -2195,6 +2314,8 @@ Examples:
             'evidence_snippets': evidence_snippets,  # 2-3 text snippets showing why it's a comp
             'evidence_by_feature': evidence_by_feature,  # Evidence mapped to P, C, M, S features
             'business_model': business_model_info,  # Business model classification and gate
+            'economic_signature': extracted.get('economic_signature', {}),  # Economic signature for archetype matching
+            'archetype_match': ranked_row.get('archetype_info', {}),  # NEW: Archetype matching info (target_archetype, candidate_archetype, similarity)
             'concept_matches': json.loads(ranked_row.get('concept_matches', '[]')) if isinstance(ranked_row.get('concept_matches'), str) else ranked_row.get('concept_matches', []),
             'segment_mix_target': target.get('segment_mix', {}),
             'segment_mix_candidate': extracted.get('segment_mix', {}),

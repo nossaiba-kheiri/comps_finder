@@ -149,9 +149,14 @@ def save_cached_extraction(
     metadata_file = CACHE_DIR / f"{cache_key}_metadata.json"
     
     try:
+        # Ensure cache directory exists
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        
         # Save extraction result
         cached_data = {
-            'extracted': extracted
+            'extracted': extracted,
+            'ticker': ticker,
+            'created_at': datetime.now().isoformat()
         }
         with open(cache_file, 'wb') as f:
             pickle.dump(cached_data, f)
@@ -163,13 +168,19 @@ def save_cached_extraction(
             'evidence_hash': evidence_hash,
             'prompt_version': prompt_version,
             'created_at': datetime.now().isoformat(),
-            'cache_key': cache_key
+            'cache_key': cache_key,
+            'cache_file': str(cache_file.name)
         }
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
+        
+        # Return success indicator (optional, for logging)
+        return True
     except Exception as e:
-        # Non-critical - continue even if caching fails
-        pass
+        # Log error but don't fail the pipeline
+        import warnings
+        warnings.warn(f"Failed to cache LLM extraction for {ticker}: {e}", stacklevel=2)
+        return False
 
 
 def clear_expired_extraction_cache() -> int:

@@ -98,7 +98,16 @@ def get_cached_embedding(text, model=MODEL, api_key=None, run_with_openai=False)
         try:
             # Try new OpenAI client API first
             from openai import OpenAI
+            from openai import RateLimitError, APIError
             client = OpenAI(api_key=api_key)
+            # Ensure text is not empty and is a string
+            if not text or not isinstance(text, str) or len(text.strip()) == 0:
+                raise ValueError(f"Invalid text input for embedding: {repr(text)}")
+            # Truncate if too long (embedding models have token limits)
+            # Rough estimate: 1 token ≈ 4 characters, max 8192 tokens ≈ 32,768 chars
+            max_chars = 30000  # Conservative limit
+            if len(text) > max_chars:
+                text = text[:max_chars]
             resp = client.embeddings.create(input=[text], model=model)
             v = np.array(resp.data[0].embedding, dtype=np.float32)
         except (ImportError, AttributeError):
@@ -106,9 +115,29 @@ def get_cached_embedding(text, model=MODEL, api_key=None, run_with_openai=False)
             openai.api_key = api_key
             resp = openai.Embedding.create(input=[text], model=model)
             v = np.array(resp['data'][0]['embedding'], dtype=np.float32)
-        v /= np.linalg.norm(v)
-        np.save(path, v)
-        return v
+        except (RateLimitError, APIError) as e:
+            # Handle rate limit and API errors gracefully
+            # Return None to signal failure, caller should handle fallback
+            import warnings
+            error_code = getattr(e, 'status_code', None) or getattr(e, 'code', None)
+            if error_code == 429:
+                warnings.warn(f"OpenAI rate limit exceeded (429) for embedding. Using fallback. Check billing/quota at https://platform.openai.com/", stacklevel=2)
+            else:
+                warnings.warn(f"OpenAI API error ({error_code}) for embedding: {e}. Using fallback.", stacklevel=2)
+            # Return None - caller should handle fallback
+            return None
+        except Exception as e:
+            # Catch any other unexpected errors
+            import warnings
+            warnings.warn(f"Unexpected error during embedding: {e}. Using fallback.", stacklevel=2)
+            return None
+        
+        # Normalize and save only if we got a valid embedding
+        if v is not None:
+            v /= np.linalg.norm(v)
+            np.save(path, v)
+            return v
+        return None
     else:
         # Use deterministic random for testing
         np.random.seed(hash(text) % (2**31))
