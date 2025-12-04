@@ -131,11 +131,12 @@ python src/universe/embeddings_index.py --openai
 ### Run Pipeline
 ```bash
 # Option 1: All-in-one (creates target.json automatically)
-python cli/run_pipeline.py \
-  --name "Awaze" \
-  --url "https://www.awaze.com" \
-  --description "European holiday rentals business" \
-  --primary-industry-classification "6531 - Real Estate Agents and Managers" \
+python comps/cli/run_pipeline.py \
+  --name "ACME Corporation" \
+  --url "https://www.acme.com" \
+  --description "Global provider of widgets and solutions." \
+  --primary-industry-classification "Technology" \
+  --linkedin-url "https://www.linkedin.com/company/acme-corp/"
   --openai
 
 # Option 2: Use existing target.json
